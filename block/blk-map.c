@@ -5,6 +5,8 @@
 #include <linux/module.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/scatterlist.h>
+#include <linux/slab.h>
 #include <scsi/sg.h>		/* for struct sg_iovec */
 
 #include "blk.h"
@@ -272,6 +274,337 @@ int blk_rq_unmap_user(struct bio *bio)
 	return ret;
 }
 EXPORT_SYMBOL(blk_rq_unmap_user);
+
+struct blk_kern_sg_work {
+	atomic_t bios_inflight;
+	struct sg_table sg_table;
+	struct scatterlist *src_sgl;
+};
+
+static void blk_free_kern_sg_work(struct blk_kern_sg_work *bw)
+{
+	sg_free_table(&bw->sg_table);
+	kfree(bw);
+	return;
+}
+
+static void blk_bio_map_kern_endio(struct bio *bio, int err)
+{
+	struct blk_kern_sg_work *bw = bio->bi_private;
+
+	if (bw != NULL) {
+		/* Decrement the bios in processing and, if zero, free */
+		BUG_ON(atomic_read(&bw->bios_inflight) <= 0);
+		if (atomic_dec_and_test(&bw->bios_inflight)) {
+			if ((bio_data_dir(bio) == READ) && (err == 0)) {
+				unsigned long flags;
+
+				local_irq_save(flags);	/* to protect KMs */
+				sg_copy(bw->src_sgl, bw->sg_table.sgl, 0, 0,
+					KM_BIO_DST_IRQ, KM_BIO_SRC_IRQ);
+				local_irq_restore(flags);
+			}
+			blk_free_kern_sg_work(bw);
+		}
+	}
+
+	bio_put(bio);
+	return;
+}
+
+static int blk_rq_copy_kern_sg(struct request *rq, struct scatterlist *sgl,
+			       int nents, struct blk_kern_sg_work **pbw,
+			       gfp_t gfp, gfp_t page_gfp)
+{
+	int res = 0, i;
+	struct scatterlist *sg;
+	struct scatterlist *new_sgl;
+	int new_sgl_nents;
+	size_t len = 0, to_copy;
+	struct blk_kern_sg_work *bw;
+
+	bw = kzalloc(sizeof(*bw), gfp);
+	if (bw == NULL)
+		goto out;
+
+	bw->src_sgl = sgl;
+
+	for_each_sg(sgl, sg, nents, i)
+		len += sg->length;
+	to_copy = len;
+
+	new_sgl_nents = PFN_UP(len);
+
+	res = sg_alloc_table(&bw->sg_table, new_sgl_nents, gfp);
+	if (res != 0)
+		goto out_free_bw;
+
+	new_sgl = bw->sg_table.sgl;
+
+	for_each_sg(new_sgl, sg, new_sgl_nents, i) {
+		struct page *pg;
+
+		pg = alloc_page(page_gfp);
+		if (pg == NULL)
+			goto err_free_new_sgl;
+
+		sg_assign_page(sg, pg);
+		sg->length = min_t(size_t, PAGE_SIZE, len);
+
+		len -= PAGE_SIZE;
+	}
+
+	if (rq_data_dir(rq) == WRITE) {
+		/*
+		 * We need to limit amount of copied data to to_copy, because
+		 * sgl might have the last element in sgl not marked as last in
+		 * SG chaining.
+		 */
+		sg_copy(new_sgl, sgl, 0, to_copy,
+			KM_USER0, KM_USER1);
+	}
+
+	*pbw = bw;
+	/*
+	 * REQ_COPY_USER name is misleading. It should be something like
+	 * REQ_HAS_TAIL_SPACE_FOR_PADDING.
+	 */
+	rq->cmd_flags |= REQ_COPY_USER;
+
+out:
+	return res;
+
+err_free_new_sgl:
+	for_each_sg(new_sgl, sg, new_sgl_nents, i) {
+		struct page *pg = sg_page(sg);
+		if (pg == NULL)
+			break;
+		__free_page(pg);
+	}
+	sg_free_table(&bw->sg_table);
+
+out_free_bw:
+	kfree(bw);
+	res = -ENOMEM;
+	goto out;
+}
+
+static int __blk_rq_map_kern_sg(struct request *rq, struct scatterlist *sgl,
+	int nents, struct blk_kern_sg_work *bw, gfp_t gfp)
+{
+	int res;
+	struct request_queue *q = rq->q;
+	int rw = rq_data_dir(rq);
+	int max_nr_vecs, i;
+	size_t tot_len;
+	bool need_new_bio;
+	struct scatterlist *sg, *prev_sg = NULL;
+	struct bio *bio = NULL, *hbio = NULL, *tbio = NULL;
+	int bios;
+
+	if (unlikely((sgl == NULL) || (sgl->length == 0) || (nents <= 0))) {
+		WARN_ON(1);
+		res = -EINVAL;
+		goto out;
+	}
+
+	/*
+	 * Let's keep each bio allocation inside a single page to decrease
+	 * probability of failure.
+	 */
+	max_nr_vecs =  min_t(size_t,
+		((PAGE_SIZE - sizeof(struct bio)) / sizeof(struct bio_vec)),
+		BIO_MAX_PAGES);
+
+	need_new_bio = true;
+	tot_len = 0;
+	bios = 0;
+	for_each_sg(sgl, sg, nents, i) {
+		struct page *page = sg_page(sg);
+		void *page_addr = page_address(page);
+		size_t len = sg->length, l;
+		size_t offset = sg->offset;
+
+		tot_len += len;
+		prev_sg = sg;
+
+		/*
+		 * Each segment must be aligned on DMA boundary and
+		 * not on stack. The last one may have unaligned
+		 * length as long as the total length is aligned to
+		 * DMA padding alignment.
+		 */
+		if (i == nents - 1)
+			l = 0;
+		else
+			l = len;
+		if (((sg->offset | l) & queue_dma_alignment(q)) ||
+		    (page_addr && object_is_on_stack(page_addr + sg->offset))) {
+			res = -EINVAL;
+			goto out_free_bios;
+		}
+
+		while (len > 0) {
+			size_t bytes;
+			int rc;
+
+			if (need_new_bio) {
+				bio = bio_kmalloc(gfp, max_nr_vecs);
+				if (bio == NULL) {
+					res = -ENOMEM;
+					goto out_free_bios;
+				}
+
+				if (rw == WRITE)
+					bio->bi_rw |= REQ_WRITE;
+
+				bios++;
+				bio->bi_private = bw;
+				bio->bi_end_io = blk_bio_map_kern_endio;
+
+				if (hbio == NULL)
+					hbio = tbio = bio;
+				else
+					tbio = tbio->bi_next = bio;
+			}
+
+			bytes = min_t(size_t, len, PAGE_SIZE - offset);
+
+			rc = bio_add_pc_page(q, bio, page, bytes, offset);
+			if (rc < bytes) {
+				if (unlikely(need_new_bio || (rc < 0))) {
+					if (rc < 0)
+						res = rc;
+					else
+						res = -EIO;
+					goto out_free_bios;
+				} else {
+					need_new_bio = true;
+					len -= rc;
+					offset += rc;
+					continue;
+				}
+			}
+
+			need_new_bio = false;
+			offset = 0;
+			len -= bytes;
+			page = nth_page(page, 1);
+		}
+	}
+
+	if (hbio == NULL) {
+		res = -EINVAL;
+		goto out_free_bios;
+	}
+
+	/* Total length must be aligned on DMA padding alignment */
+	if ((tot_len & q->dma_pad_mask) &&
+	    !(rq->cmd_flags & REQ_COPY_USER)) {
+		res = -EINVAL;
+		goto out_free_bios;
+	}
+
+	if (bw != NULL)
+		atomic_set(&bw->bios_inflight, bios);
+
+	while (hbio != NULL) {
+		bio = hbio;
+		hbio = hbio->bi_next;
+		bio->bi_next = NULL;
+
+		blk_queue_bounce(q, &bio);
+
+		res = blk_rq_append_bio(q, rq, bio);
+		if (unlikely(res != 0)) {
+			bio->bi_next = hbio;
+			hbio = bio;
+			/* We can have one or more bios bounced */
+			goto out_unmap_bios;
+		}
+	}
+
+	res = 0;
+
+	rq->buffer = NULL;
+out:
+	return res;
+
+out_unmap_bios:
+	blk_rq_unmap_kern_sg(rq, res);
+
+out_free_bios:
+	while (hbio != NULL) {
+		bio = hbio;
+		hbio = hbio->bi_next;
+		bio_put(bio);
+	}
+	goto out;
+}
+
+/**
+ * blk_rq_map_kern_sg - map kernel data to a request, for REQ_TYPE_BLOCK_PC
+ * @rq:		request to fill
+ * @sgl:	area to map
+ * @nents:	number of elements in @sgl
+ * @gfp:	memory allocation flags
+ *
+ * Description:
+ *    Data will be mapped directly if possible. Otherwise a bounce
+ *    buffer will be used.
+ */
+int blk_rq_map_kern_sg(struct request *rq, struct scatterlist *sgl,
+		       int nents, gfp_t gfp)
+{
+	int res;
+
+	res = __blk_rq_map_kern_sg(rq, sgl, nents, NULL, gfp);
+	if (unlikely(res != 0)) {
+		struct blk_kern_sg_work *bw = NULL;
+
+		res = blk_rq_copy_kern_sg(rq, sgl, nents, &bw,
+				gfp, rq->q->bounce_gfp | gfp);
+		if (unlikely(res != 0))
+			goto out;
+
+		res = __blk_rq_map_kern_sg(rq, bw->sg_table.sgl,
+				bw->sg_table.nents, bw, gfp);
+		if (res != 0) {
+			blk_free_kern_sg_work(bw);
+			goto out;
+		}
+	}
+
+	rq->buffer = NULL;
+
+out:
+	return res;
+}
+EXPORT_SYMBOL(blk_rq_map_kern_sg);
+
+/**
+ * blk_rq_unmap_kern_sg - unmap a request with kernel sg
+ * @rq:		request to unmap
+ * @err:	non-zero error code
+ *
+ * Description:
+ *    Unmap a rq previously mapped by blk_rq_map_kern_sg(). Must be called
+ *    only in case of an error!
+ */
+void blk_rq_unmap_kern_sg(struct request *rq, int err)
+{
+	struct bio *bio = rq->bio;
+
+	while (bio) {
+		struct bio *b = bio;
+		bio = bio->bi_next;
+		b->bi_end_io(b, err);
+	}
+	rq->bio = NULL;
+
+	return;
+}
+EXPORT_SYMBOL(blk_rq_unmap_kern_sg);
 
 /**
  * blk_rq_map_kern - map kernel data to a request, for REQ_TYPE_BLOCK_PC usage

@@ -16,5 +16,13 @@ obj-$(CONFIG_MACH_NETSPACE_MAX_V2)	+= netspace_v2-setup.o
 obj-$(CONFIG_MACH_NET2BIG_V2)		+= netxbig_v2-setup.o
 obj-$(CONFIG_MACH_NET5BIG_V2)		+= netxbig_v2-setup.o
 obj-$(CONFIG_MACH_T5325)		+= t5325-setup.o
+obj-$(CONFIG_MACH_NC21)		+= nc21-setup.o
+obj-$(CONFIG_MACH_NC2)		+= nc2-setup.o
+obj-$(CONFIG_MACH_NT1)		+= nt1-setup.o
+obj-$(CONFIG_MACH_NT11)		+= nt11-setup.o
+obj-$(CONFIG_MACH_NC1)		+= nc1-setup.o
 
+obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o
 obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
+obj-$(CONFIG_HIBERNATION)		+= cpu.o swsusp.o
+obj-$(CONFIG_SUSPEND)				+= pm.o

@@ -10,6 +10,25 @@ config PCIEPORTBUS
 	  Power Management Event support and Virtual Channel support to run
 	  on PCI Express Ports (Root or Switch).
 
+config ATHEROS_3X3_SUPPORT
+	bool "PCI Express support Atheros 3x3 PCIe card"
+	depends on PCIEPORTBUS && APM82181
+	help
+		This automatically enables PCI Express Port Bus supports Atheros
+		3x3 PCIe card. With this option, some PCIe cards will cannot run 
+		correctly as PCIE NIC IntelPro/1000 PT quad port, SAS LSI 1064E.
+choice
+        prompt "PCIE Max Payload Size"
+        depends on PCIEPORTBUS && APM82181
+        default PCIE_MAX_PAYLOAD_SIZE_256
+
+config PCIE_MAX_PAYLOAD_SIZE_128
+        bool "128 Bytes"
+
+config PCIE_MAX_PAYLOAD_SIZE_256
+        bool "256 Bytes"
+endchoice
+
 #
 # Include service Kconfig here
 #

@@ -55,6 +55,9 @@
 #define SECTOR_SIZE		512
 #define ATA_SCSI_RBUF_SIZE	4096
 
+// Jmicron ctlp walk around
+#define HDIO_JMICRON_TASK 0x197B
+
 static DEFINE_SPINLOCK(ata_scsi_rbuf_lock);
 static u8 ata_scsi_rbuf[ATA_SCSI_RBUF_SIZE];
 
@@ -414,6 +417,64 @@ int ata_std_bios_param(struct scsi_device *sdev, struct block_device *bdev,
 	return 0;
 }
 
+/*************
+*  ssc_check - Handler for HDIO_DRIVE_TASK ioctl
+*      @ap: target port
+*      @sdev: SCSI device to get identify data for
+*  @devname: hdd model
+*  @ssc: on/off
+*  RETURNS:
+*  zero on success, negative errno on error
+*************/
+#define IDEN_MODEL_SIZE     11
+#define HTC_SSC     0x0800
+int ssc_check(struct ata_port *ap, struct ata_device *dev, char* devname, u16 ssc)
+{
+	static const char *ssc_hdd_list[]={
+		"Hitachi HDT",
+		"Hitachi HCS",
+		"Hitachi HDS",
+	};
+	static struct ata_taskfile tf;
+	int i;
+
+	ata_tf_init(dev, &tf);
+	tf.command = 0x8f;
+	tf.feature = 0x51;
+	tf.nsect = 0;
+	tf.lbal = 0x00;
+	tf.lbam = 0xc7;
+	tf.lbah = 0xa9;
+	tf.device = 0x00;
+	tf.flags |= ATA_TFLAG_DEVICE|ATA_TFLAG_ISADDR|ATA_TFLAG_WRITE;
+	tf.protocol = ATA_PROT_NODATA;
+
+	for (i=0;  i < sizeof(ssc_hdd_list)/sizeof(char *); i++)
+	{
+		if( !strncmp( ssc_hdd_list[i], devname, IDEN_MODEL_SIZE ) ) {
+			printk("*****************************************\n");
+			printk("Model: %s, ssc word: %04x\n", devname, ssc);
+			printk("SSC Status : %s\n", ssc & HTC_SSC ? "ON":"OFF");
+
+			if( (ssc & HTC_SSC) != HTC_SSC) {
+				//i = ata_sas_scsi_ioctl(ap, sdev, HDIO_DRIVE_TASK, args);
+				i = ata_exec_internal(dev, &tf, NULL, DMA_NONE, NULL, 0, 1000);
+				printk("Turning on SSC: result=%d\n", i);
+			}
+			/*
+			else {
+			tf.feature = 0xd1;
+			i = ata_exec_internal(dev, &tf, NULL, DMA_NONE, NULL, 0, 1000);
+			printk("Turning off SSC: result=%d\n", i);
+			}
+			*/
+			printk("*****************************************\n");
+			break;
+		}
+	}
+
+	return 0;
+}
 /**
  *	ata_scsi_unlock_native_capacity - unlock native capacity
  *	@sdev: SCSI device to adjust device capacity for
@@ -677,6 +738,104 @@ int ata_task_ioctl(struct scsi_device *scsidev, void __user *arg)
 	return rc;
 }
 
+
+/** ==========================================================================*/
+/** Jmicron ctlp walk around                                                  */
+/** ==========================================================================*/
+/**
+ *	jmicron_sata_pmp_ioctl - Handler for HDIO_JMICRON_TASK ioctl
+ *
+ *	RETURNS:
+ *	Zero on success, negative errno on error.
+ */
+int jmicron_sata_pmp_ioctl(struct ata_port *ap, void __user *arg)
+{
+	int rc = 0;
+	u8 args[16];
+	struct ata_link *pmp_link;
+	struct ata_device *pmp_dev;
+	struct ata_taskfile tf;
+	unsigned int err_mask;
+	//int i;
+	int pmp_orig;
+
+	if (arg == NULL)
+		return -EINVAL;
+
+	if (copy_from_user(args, arg, sizeof(args)))
+		return -EFAULT;
+		
+	if (args[6] & 0x80) {
+		if (!sata_pmp_supported(ap)) {
+			printk("JM Ctlp: host does not support Port Multiplier\n");
+			return -EINVAL;
+		}
+
+		if (!ap->nr_pmp_links) {
+			printk("JM Ctlp: no pmp_link available on host\n");
+			return -EINVAL;
+		}
+
+		pmp_dev = ap->link.device;
+		ata_tf_init(pmp_dev, &tf);
+		tf.protocol = ATA_PROT_NODATA;
+		tf.flags |= ATA_TFLAG_ISADDR | ATA_TFLAG_DEVICE | ATA_TFLAG_LBA48;
+		tf.feature      = args[1];
+		tf.nsect        = args[2];
+		tf.lbal         = args[3];
+		tf.lbam         = args[4];
+		tf.lbah         = args[5];
+		tf.device       = args[6] & 0x7F;
+		tf.command      = args[7];
+		tf.hob_feature  = args[9];
+		tf.hob_nsect    = args[10];
+		tf.hob_lbal     = args[11];
+		tf.hob_lbam     = args[12];
+		tf.hob_lbah     = args[13];
+		if(args[15] & ATA_SRST)
+			tf.ctl |=  ATA_SRST;
+		else
+			tf.ctl &= ~ATA_SRST;
+
+		pmp_link = &ap->pmp_link[0];
+		pmp_orig = pmp_link->pmp;
+		pmp_link->pmp = SATA_PMP_CTRL_PORT;
+		err_mask = ata_exec_internal(pmp_dev, &tf, NULL, DMA_NONE, NULL, 0,
+				     SATA_PMP_RW_TIMEOUT);
+		pmp_link->pmp = pmp_orig;
+
+		//args[1]  = tf.feature;
+		args[2]  = tf.nsect;
+		args[3]  = tf.lbal;
+		args[4]  = tf.lbam;
+		args[5]  = tf.lbah;
+		args[6]  = tf.device;
+		//args[7]  = tf.command;
+		args[9]  = tf.hob_feature;
+		args[10] = tf.hob_nsect;
+		args[11] = tf.hob_lbal;
+		args[12] = tf.hob_lbam;
+		args[13] = tf.hob_lbah;
+				     
+		if (err_mask) {
+			args[1] = 0x04;
+			args[7] = 0x51;
+			rc = -EIO;
+		}
+		else {
+			args[1] = 0x00;
+			args[7] = 0x50;
+		}
+
+		if (copy_to_user(arg, args, sizeof(args)))
+			rc = -EFAULT;
+	}
+	else
+		rc = -EINVAL;
+
+	return rc;
+}
+
 static int ata_ioc32(struct ata_port *ap)
 {
 	if (ap->flags & ATA_FLAG_PIO_DMA)
@@ -685,7 +844,6 @@ static int ata_ioc32(struct ata_port *ap)
 		return 1;
 	return 0;
 }
-
 int ata_sas_scsi_ioctl(struct ata_port *ap, struct scsi_device *scsidev,
 		     int cmd, void __user *arg)
 {
@@ -729,7 +887,11 @@ int ata_sas_scsi_ioctl(struct ata_port *ap, struct scsi_device *scsidev,
 		if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		return ata_task_ioctl(scsidev, arg);
-
+	//LGNAS 20110524 omw for jmicron FW download
+	case HDIO_JMICRON_TASK:
+		if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO))
+			return -EACCES;
+		return jmicron_sata_pmp_ioctl(ap, arg);
 	default:
 		rc = -ENOTTY;
 		break;

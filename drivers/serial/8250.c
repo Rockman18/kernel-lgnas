@@ -92,7 +92,11 @@ static unsigned int skip_txen_test; /* force skip of txen test at init time */
  * machine types want others as well - they're free
  * to redefine this in their header file.
  */
+#ifdef CONFIG_4xx
+#define is_real_interrupt(irq)  (1)
+#else
 #define is_real_interrupt(irq)	((irq) != 0)
+#endif
 
 #ifdef CONFIG_SERIAL_8250_DETECT_IRQ
 #define CONFIG_SERIAL_DETECT_IRQ 1

@@ -94,6 +94,12 @@ config GPIO_VR41XX
 	help
 	  Say yes here to support the NEC VR4100 series General-purpose I/O Uint
 
+config GPIO_F71808E 
+	tristate "F71808E GPIO support"
+	depends on GPIOLIB
+	help
+	  Say yes here to support GPIO functionality of F71808E super I/O chip.
+
 config GPIO_SCH
 	tristate "Intel SCH GPIO"
 	depends on GPIOLIB && PCI
@@ -294,6 +300,13 @@ config GPIO_BT8XX
 	  Documentation/bt8xxgpio.txt
 
 	  If unsure, say N.
+
+config GPIO_I801
+	tristate "Intel 82801 (ICH) GPIO"
+	depends on PCI
+	help
+	  This driver is for the GPIO pins of Intel 82801 south bridges
+	  (aka ICH).
 
 config GPIO_LANGWELL
 	bool "Intel Langwell/Penwell GPIO support"

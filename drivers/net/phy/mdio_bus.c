@@ -297,7 +297,11 @@ static bool mdio_bus_phy_may_suspend(struct phy_device *phydev)
 	return true;
 }
 
+#ifdef CONFIG_MACH_LGAMS
+static int mdio_bus_suspend(struct device *dev, pm_message_t state)
+#else
 static int mdio_bus_suspend(struct device *dev)
+#endif
 {
 	struct phy_driver *phydrv = to_phy_driver(dev->driver);
 	struct phy_device *phydev = to_phy_device(dev);
@@ -337,6 +341,7 @@ no_resume:
 	return 0;
 }
 
+#ifndef CONFIG_MACH_LGAMS
 static int mdio_bus_restore(struct device *dev)
 {
 	struct phy_device *phydev = to_phy_device(dev);
@@ -366,6 +371,7 @@ static struct dev_pm_ops mdio_bus_pm_ops = {
 	.thaw = mdio_bus_resume,
 	.restore = mdio_bus_restore,
 };
+#endif
 
 #define MDIO_BUS_PM_OPS (&mdio_bus_pm_ops)
 
@@ -378,7 +384,12 @@ static struct dev_pm_ops mdio_bus_pm_ops = {
 struct bus_type mdio_bus_type = {
 	.name		= "mdio_bus",
 	.match		= mdio_bus_match,
+#if defined(CONFIG_MACH_LGAMS) && defined(CONFIG_PM)
+	.suspend = mdio_bus_suspend,
+	.resume = mdio_bus_resume,
+#else
 	.pm		= MDIO_BUS_PM_OPS,
+#endif
 };
 EXPORT_SYMBOL(mdio_bus_type);
 

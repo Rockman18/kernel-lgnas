@@ -35,12 +35,16 @@ obj-$(CONFIG_PPC_INDIRECT_PCI)	+= indirect_pci.o
 obj-$(CONFIG_PPC_I8259)		+= i8259.o
 obj-$(CONFIG_IPIC)		+= ipic.o
 obj-$(CONFIG_4xx)		+= uic.o
+obj-$(CONFIG_PPC4xx_HAVEN_DMA)	+= ppc4xx_haven_dma.o
+obj-$(CONFIG_PPC4xx_HAVEN_HSDMA)	+= ppc4xx_haven_hsdma.o
+obj-$(CONFIG_PPC4xx_OCM)	+= ppc4xx_ocm.o
 obj-$(CONFIG_4xx_SOC)		+= ppc4xx_soc.o
 obj-$(CONFIG_XILINX_VIRTEX)	+= xilinx_intc.o
 obj-$(CONFIG_XILINX_PCI)	+= xilinx_pci.o
 obj-$(CONFIG_OF_RTC)		+= of_rtc.o
 ifeq ($(CONFIG_PCI),y)
 obj-$(CONFIG_4xx)		+= ppc4xx_pci.o
+obj-$(CONFIG_PCI_MSI)		+= ppc4xx_msi.o
 endif
 obj-$(CONFIG_PPC4xx_GPIO)	+= ppc4xx_gpio.o
 
@@ -54,6 +58,9 @@ obj-$(CONFIG_UCODE_PATCH)	+= micropatch.o
 obj-$(CONFIG_PPC_MPC512x)	+= mpc5xxx_clocks.o
 obj-$(CONFIG_PPC_MPC52xx)	+= mpc5xxx_clocks.o
 
+obj-$(CONFIG_PPC4xx_CPM)        += ppc4xx_cpm.o ppc4xx_cpm_asm.o
+
 ifeq ($(CONFIG_SUSPEND),y)
 obj-$(CONFIG_6xx)		+= 6xx-suspend.o
+obj-$(CONFIG_PPC4xx_CPM)	+= ppc4xx_suspend.o
 endif

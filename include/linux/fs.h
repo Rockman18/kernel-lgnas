@@ -946,6 +946,10 @@ struct file {
 #ifdef CONFIG_DEBUG_WRITECOUNT
 	unsigned long f_mnt_write_state;
 #endif
+#ifdef S_MIRROR
+	struct file     *f_mirror;
+	unsigned int    updated;
+#endif
 };
 
 #define get_file(x)	atomic_long_inc(&(x)->f_count)

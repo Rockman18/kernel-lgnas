@@ -210,7 +210,7 @@ config ARCH_HIBERNATION_POSSIBLE
 config ARCH_SUSPEND_POSSIBLE
 	def_bool y
 	depends on ADB_PMU || PPC_EFIKA || PPC_LITE5200 || PPC_83xx || \
-		   PPC_85xx || PPC_86xx || PPC_PSERIES
+		   PPC_85xx || PPC_86xx || PPC_PSERIES || PPC4xx_CPM
 
 config PPC_DCR_NATIVE
 	bool
@@ -562,6 +562,16 @@ config PPC_SUBPAGE_PROT
 	  to set access permissions (read/write, readonly, or no access)
 	  on the 4k subpages of each 64k page.
 
+config FAST_MEMSET
+	bool "Fast Memset"
+	depends on 4xx
+	---help---
+	  Fast memset can be enabled to enhance memset performance.
+	  But this version of memset will work only with cached memory. Since it
+	  modifies the global memset, which can be called for uncached memory too,
+	  it is best to enable this only on specific scenarios. Be really careful
+	  if you need to enabled Fast Memset
+
 config SCHED_SMT
 	bool "SMT (Hyperthreading) scheduler support"
 	depends on PPC64 && SMP
@@ -596,13 +606,14 @@ config EXTRA_TARGETS
 
 	  If unsure, leave blank
 
-if !44x || BROKEN
+if !BROKEN
 config ARCH_WANTS_FREEZER_CONTROL
 	def_bool y
-	depends on ADB_PMU
+	depends on ADB_PMU || PPC4xx_CPM
 
 source kernel/power/Kconfig
 endif
+
 
 config SECCOMP
 	bool "Enable seccomp to safely compute untrusted bytecode"
@@ -652,7 +663,7 @@ config NEED_SG_DMA_LENGTH
 
 config GENERIC_ISA_DMA
 	bool
-	depends on ISA_DMA_API
+	depends on PPC64 || POWER4 || 6xx || 44x && !CPM2
 	default y
 
 config PPC_INDIRECT_PCI
@@ -770,6 +781,20 @@ source "drivers/pci/Kconfig"
 source "drivers/pcmcia/Kconfig"
 
 source "drivers/pci/hotplug/Kconfig"
+
+config PPC4xx_HAVEN_HSDMA
+        bool "AMCC HAVEN HSDMA support"
+        depends on 460GT || 460EX || 460EXR || 431EXR || AM81281
+	select GENERIC_ISA_DMA
+        help
+          If you say yes here, the kernel will include AMCC code
+          to support HAVEN HSDMA for 460EX/EXr/GT processor.
+
+config PPC4xx_HAVEN_HSDMA_MODULE
+        bool "AMCC HAVEN HSDMA module support"
+        depends on PPC4xx_HSDMA
+        help
+          If you say yes here, AMCC HAVEN HSDMA will be built as module.
 
 config HAS_RAPIDIO
 	bool

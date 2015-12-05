@@ -72,12 +72,33 @@ config INET
 
 	  Short answer: say Y.
 
+config TCP_ZERO_COPY_TRANSFER_COMPLETION_NOTIFICATION
+	bool "TCP/IP zero-copy transfer completion notification"
+        depends on INET
+        default SCST_ISCSI
+	---help---
+	  Adds support for sending a notification upon completion of a
+          zero-copy TCP/IP transfer. This can speed up certain TCP/IP
+          software. Currently this is only used by the iSCSI target driver
+          iSCSI-SCST.
+
+          If unsure, say N.
+
 if INET
 source "net/ipv4/Kconfig"
 source "net/ipv6/Kconfig"
 source "net/netlabel/Kconfig"
 
 endif # if INET
+
+config NET_MACSEC
+	bool "IP: MACSEC"
+	select CRYPTO
+	select CRYPTO_GCM
+	---help---
+	  Support for Macsec.
+
+	  If unsure, say Y.
 
 config NETWORK_SECMARK
 	bool "Security Marking"

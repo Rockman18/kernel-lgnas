@@ -366,6 +366,19 @@ config INET_ESP
 
 	  If unsure, say Y.
 
+config INET_ESP_NR_REQ_CACHE
+	int "Number of ESP request cache per connection"
+	range 0 256
+	depends on INET_ESP
+	default "0"
+	---help---
+	Specify the number of ESP request crypto object cache per connection.
+	For ESP transport and tunnel modes, ESP request crypto cache object
+	can be cached instead returns to the memory pool after each packet
+	is being processed. This helps performance for slow processor with
+	memory cost. This value should be equal to the hardware offload
+	descriptor size.
+
 config INET_IPCOMP
 	tristate "IP: IPComp transformation"
 	select INET_XFRM_TUNNEL

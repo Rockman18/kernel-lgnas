@@ -269,8 +269,16 @@ static int max_sched_shares_ratelimit = NSEC_PER_SEC; /* 1 second */
 static int min_extfrag_threshold;
 static int max_extfrag_threshold = 1000;
 #endif
+static int kern_revision = CONFIG_KERNEL_REVISION;
 
 static struct ctl_table kern_table[] = {
+  {
+    .procname	= "revision",
+    .data		= &kern_revision,
+    .maxlen		= sizeof(int),
+    .mode		= 0644,
+    .proc_handler	= proc_dointvec,
+  },
 	{
 		.procname	= "sched_child_runs_first",
 		.data		= &sysctl_sched_child_runs_first,

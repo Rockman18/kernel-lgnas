@@ -105,6 +105,7 @@
 #include <net/pkt_sched.h>
 #include <net/checksum.h>
 #include <net/xfrm.h>
+#include <net/macsec.h>
 #include <linux/highmem.h>
 #include <linux/init.h>
 #include <linux/kmod.h>
@@ -1977,6 +1978,13 @@ int dev_hard_start_xmit(struct sk_buff *skb, struct net_device *dev,
 			}
 		}
 
+#ifdef CONFIG_NET_MACSEC
+		if (netdev_macsec_priv(dev)) {
+			rc = dev->macsec_output_hw(skb, dev);
+			if (rc == -EINPROGRESS)
+				return 0;
+		}
+#endif
 		rc = ops->ndo_start_xmit(skb, dev);
 		if (rc == NETDEV_TX_OK)
 			txq_trans_update(txq);
@@ -2912,6 +2920,21 @@ ncls:
 			goto out;
 	}
 
+#ifdef CONFIG_NET_MACSEC
+	if (macsec_type_trans(skb) == ETH_P_MACSEC) {
+	if (skb->dev->macsec_priv) {
+		ret = skb->dev->macsec_input_hw(skb);
+		if (ret == -EINPROGRESS) {
+			ret = 0;
+			goto out;
+		}
+	}
+	kfree_skb(skb);
+	ret = NET_RX_DROP;
+	goto out;
+	}
+#endif
+
 	/*
 	 * Make sure frames received on VLAN interfaces stacked on
 	 * bonding interfaces still make their way to any base bonding
@@ -2999,6 +3022,60 @@ int netif_receive_skb(struct sk_buff *skb)
 #endif
 }
 EXPORT_SYMBOL(netif_receive_skb);
+
+int macsec_netif_receive_skb(struct sk_buff *skb, __be16 type)
+{
+	struct packet_type *ptype, *pt_prev;
+	struct net_device *orig_dev;
+	struct net_device *null_or_orig;
+	struct net_device *master;
+	int ret = NET_RX_DROP;
+
+	pt_prev = NULL;
+#if 0
+	orig_dev = skb_bond(skb);
+	if (!orig_dev)
+		return NET_RX_DROP;
+#endif
+	//printk("calling macsec_netif_receive_skb\n");
+	null_or_orig = NULL;
+	orig_dev = skb->dev;
+	master = ACCESS_ONCE(orig_dev->master);
+	if (skb->deliver_no_wcard)
+		null_or_orig = orig_dev;
+	else if (master) {
+		printk("Master is Different\n");
+		if (skb_bond_should_drop(skb, master)){
+			skb->deliver_no_wcard = 1;
+			null_or_orig = orig_dev; /* deliver only exact match */
+		} else
+			skb->dev = master;
+	}
+
+	list_for_each_entry_rcu(ptype,
+		&ptype_base[ntohs(type) & PTYPE_HASH_MASK], list) {
+	if (ptype->type == type &&
+		   (ptype->dev == null_or_orig || ptype->dev == skb->dev ||
+		   ptype->dev == orig_dev)) {
+		if (pt_prev) {
+			ret = deliver_skb(skb, pt_prev, orig_dev);
+		}
+		pt_prev = ptype;
+		}
+	}
+	if (pt_prev) {
+		ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
+	} else {
+		if (skb_shinfo(skb)->nr_frags) {
+			printk(KERN_ERR "skb has frags which is not possible !!!\n");
+		}
+		kfree_skb(skb);
+		ret = NET_RX_DROP;
+	}
+
+	return ret;
+	
+}
 
 /* Network device is going away, flush any packets still pending
  * Called with irqs disabled.
@@ -3150,7 +3227,7 @@ pull:
 		skb_shinfo(skb)->frags[0].size -= grow;
 
 		if (unlikely(!skb_shinfo(skb)->frags[0].size)) {
-			put_page(skb_shinfo(skb)->frags[0].page);
+			net_put_page(skb_shinfo(skb)->frags[0].page);
 			memmove(skb_shinfo(skb)->frags,
 				skb_shinfo(skb)->frags + 1,
 				--skb_shinfo(skb)->nr_frags * sizeof(skb_frag_t));
@@ -4481,6 +4558,7 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, unsigned int cmd)
 	int err;
 	struct net_device *dev = __dev_get_by_name(net, ifr->ifr_name);
 	const struct net_device_ops *ops;
+	void *mac_priv;
 
 	if (!dev)
 		return -ENODEV;
@@ -4542,6 +4620,31 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, unsigned int cmd)
 	case SIOCSIFNAME:
 		ifr->ifr_newname[IFNAMSIZ-1] = '\0';
 		return dev_change_name(dev, ifr->ifr_newname);
+
+	case SIOCSETMACSEC:
+#ifdef CONFIG_NET_MACSEC
+		mac_priv = netdev_macsec_priv(dev);
+		err = 0;
+		if (!mac_priv){
+			err = macsec_init_state(dev);
+		} else {
+			printk("Macsec session already set\n");
+			return -EEXIST;
+		}
+		dev->hard_header_len 	= ETH_HLEN + 8;
+		return err;
+#else
+		return -EINVAL;
+#endif
+
+	case SIOCUNSETMACSEC:
+#ifdef CONFIG_NET_MACSEC
+		macsec_destroy(dev);
+		dev->hard_header_len 	= ETH_HLEN;
+		return 0;
+#else
+		return -EINVAL;
+#endif
 
 	/*
 	 *	Unknown or private ioctl
@@ -4701,6 +4804,8 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	case SIOCSIFFLAGS:
 	case SIOCSIFMETRIC:
 	case SIOCSIFMTU:
+	case SIOCSETMACSEC:
+	case SIOCUNSETMACSEC:	
 	case SIOCSIFMAP:
 	case SIOCSIFHWADDR:
 	case SIOCSIFSLAVE:

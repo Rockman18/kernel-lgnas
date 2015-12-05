@@ -21,6 +21,10 @@
 #include <mach/hardware.h>
 #include <plat/orion_nand.h>
 
+#ifdef CONFIG_MTD_NAND_BBM
+#include <linux/mtd/nand_bbm.h>
+#endif
+
 #ifdef CONFIG_MTD_CMDLINE_PARTS
 static const char *part_probes[] = { "cmdlinepart", NULL };
 #endif
@@ -129,12 +133,20 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 	if (board->dev_ready)
 		nc->dev_ready = board->dev_ready;
 
+#ifdef CONFIG_MTD_NAND_BBM
+  nc->options |= NAND_SKIP_BBTSCAN;
+#endif
+
 	platform_set_drvdata(pdev, mtd);
+
 
 	if (nand_scan(mtd, 1)) {
 		ret = -ENXIO;
 		goto no_dev;
 	}
+#ifdef CONFIG_MTD_NAND_BBM
+  nand_bbm_init(mtd);
+#endif
 
 #ifdef CONFIG_MTD_PARTITIONS
 #ifdef CONFIG_MTD_CMDLINE_PARTS

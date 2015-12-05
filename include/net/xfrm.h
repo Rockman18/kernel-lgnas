@@ -169,6 +169,11 @@ struct xfrm_state {
 	struct xfrm_algo	*ealg;
 	struct xfrm_algo	*calg;
 	struct xfrm_algo_aead	*aead;
+	#define XFRM_ALGO_FLAGS_OFFLOAD_TRANPORT        0x0001
+        #define XFRM_ALGO_FLAGS_OFFLOAD_TUNNEL          0x0002
+        #define XFRM_ALGO_FLAGS_OFFLOAD_ESP             0x0004
+        #define XFRM_ALGO_FLAGS_OFFLOAD_AH              0x0008
+        u32                     alg_flags;
 
 	/* Data for encapsulator */
 	struct xfrm_encap_tmpl	*encap;

@@ -39,6 +39,8 @@ void atl1c_hash_set(struct atl1c_hw *hw, u32 hash_value);
 int atl1c_read_phy_reg(struct atl1c_hw *hw, u16 reg_addr, u16 *phy_data);
 int atl1c_write_phy_reg(struct atl1c_hw *hw, u32 reg_addr, u16 phy_data);
 bool atl1c_read_eeprom(struct atl1c_hw *hw, u32 offset, u32 *p_value);
+//bool atl1c_write_eeprom(struct atl1c_hw *hw, u32 offset, u32 value);
+bool atl1c_write_eeprom(struct atl1c_hw *hw, u32 offset, u32 value, u32 value1);
 int atl1c_phy_init(struct atl1c_hw *hw);
 int atl1c_check_eeprom_exist(struct atl1c_hw *hw);
 int atl1c_restart_autoneg(struct atl1c_hw *hw);

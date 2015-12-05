@@ -30,6 +30,9 @@
 #include <linux/fs_struct.h>
 #include <linux/ima.h>
 #include <linux/dnotify.h>
+#ifdef S_MIRROR
+#include "s_mirror.h"
+#endif
 
 #include "internal.h"
 
@@ -498,6 +501,9 @@ SYSCALL_DEFINE3(fchmodat, int, dfd, const char __user *, filename, mode_t, mode)
 out_unlock:
 	mutex_unlock(&inode->i_mutex);
 	mnt_drop_write(path.mnt);
+#ifdef S_MIRROR
+	sm_sys_chmod(&path, filename, mode);
+#endif
 dput_and_out:
 	path_put(&path);
 out:
@@ -890,6 +896,10 @@ long do_sys_open(int dfd, const char __user *filename, int flags, int mode)
 			} else {
 				fsnotify_open(f);
 				fd_install(fd, f);
+#ifdef S_MIRROR
+				sm_sys_open(dfd, f, tmp, flags, mode);
+#endif
+
 			}
 		}
 		putname(tmp);
@@ -984,6 +994,10 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	FD_CLR(fd, fdt->close_on_exec);
 	__put_unused_fd(files, fd);
 	spin_unlock(&files->file_lock);
+#ifdef S_MIRROR
+	sm_sys_close( filp, files );
+#endif
+
 	retval = filp_close(filp, files);
 
 	/* can't restart close syscall because file table entry was cleared */

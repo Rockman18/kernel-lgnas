@@ -400,6 +400,111 @@ static int m88e1112_init(struct mii_phy *phy)
 	return  0;
 }
 
+static int m88e1141_init(struct mii_phy *phy)
+{
+        unsigned short data;
+
+	printk(KERN_CRIT "we go to init for %d\n", phy->mode);
+        switch (phy->mode) {
+        case PHY_MODE_GMII:
+#if defined(CONFIG_M88E1141_DEBUG)
+                data = phy_read(phy, 0x00);
+                        data |= 0x2000; /* Speed Select 1000Mbps */
+                        phy_write(phy, 0x00, data);
+                data = phy_read(phy, 0x14);
+                        data |= 0x0010;  /* GMII Deafult MAC interface speed */
+                        phy_write(phy, 0x14, data);
+                data = phy_read(phy, 0x1B);
+                        data |= 0x8000; /* Auto Selection = Disable */
+                        data |= 0x0400; /* Interrupt Polarity = Active Low */
+                        data |= 0x0080; /* DTE Detect Status wait time */
+                        data |= 0x000F; /* HWCFG_MODE = GMII */
+                        phy_write(phy, 0x1B, data);
+                data = phy_read(phy, 0x04);
+                        data |= 0x0C00; /* Async Pause + Pause */
+                        data |= 0x01E0; /* 100FDX + 100HDX + 10FDX + 10HDX */
+                        phy_write(phy, 0x04, data);
+                data = phy_read(phy, 0x09);
+                        //data |= 0x1C00; /* Master/Slave Config */
+                        data |= 0x0300; /* 1000FDX + 1000HDX */
+                        phy_write(phy, 0x09, data);
+#else
+                data = phy_read(phy, 0x14);
+                        data |= 0x0010;  /* GMII Deafult MAC interface speed */
+                        phy_write(phy, 0x14, data);
+                data = phy_read(phy, 0x1B);
+                        data |= 0x000F; /* HWCFG_MODE = GMII */
+                        phy_write(phy, 0x1B, data);
+#endif
+                break;
+        case PHY_MODE_RGMII:
+#if defined(CONFIG_M88E1141_DEBUG)
+                data = phy_read(phy, 0x00);
+                        data |= 0x2000; /* Speed Select 1000Mbps */
+                        phy_write(phy, 0x00, data);
+                data = phy_read(phy, 0x14);
+                        data |= 0x0080; /* RGMII RX Timing Control */
+                        data |= 0x0002; /* RGMII TX Timing Control */
+                        data |= 0x0050; /* RGMII Deafult MAC interface speed */
+                        phy_write(phy, 0x14, data);
+                data = phy_read(phy, 0x1B);
+                        data |= 0x8000; /* Auto Selection = Disable */
+                        data |= 0x0400; /* Interrupt Polarity = Active Low */
+                        data |= 0x0080; /* DTE Detect Status wait time */
+                        data |= 0x000B; /* HWCFG_MODE = RGMII */
+                        phy_write(phy, 0x1B, data);
+                data = phy_read(phy, 0x04);
+                        data |= 0x0C00; /* Async Pause + Pause */
+                        data |= 0x01E0; /* 100FDX + 100HDX + 10FDX + 10HDX */
+                        phy_write(phy, 0x04, data);
+                data = phy_read(phy, 0x09);
+                        //data |= 0x1C00; /* Master/Slave Config */
+                        data |= 0x0300; /* 1000FDX + 1000HDX */
+                        phy_write(phy, 0x09, data);
+#else
+                data = phy_read(phy, 0x14);
+                        data |= 0x0080; /* RGMII RX Timing Control */
+                        data |= 0x0002; /* RGMII TX Timing Control */
+                        data |= 0x0050; /* RGMII Deafult MAC interface speed */
+                        phy_write(phy, 0x14, data);
+                data = phy_read(phy, 0x1B);
+                        data |= 0x000B; /* HWCFG_MODE = RGMII */
+                        phy_write(phy, 0x1B, data);
+#endif
+                break;
+        case PHY_MODE_SGMII:
+                data = phy_read(phy, 0x14);
+                        data &= ~0x0080; /* CLEAR - RGMII setting */
+                        data &= ~0x0002; /* CLEAR - RGMII setting */
+                        data &= ~0x0070; /* CLEAR - Default MAC speed */
+                        data |= 0x0070;  /* GMII Deafult MAC interface speed */
+                        phy_write(phy, 0x14, data);
+
+                data = phy_read(phy, 0x1B);
+                        data |= 0x8000; /* Auto Selection = Disable */
+                        data &= ~0x0400; /* Interrupt Polarity = Active Low */
+                        data |= 0x0120; /* DTE Detect Status wait time */
+                        data &= ~0x000F;/* CLEAR - HWCFG_MODE setting */
+                        data |= 0x0000; /* HWCFG_MODE = SGMII */
+                        phy_write(phy, 0x1B, data);
+
+                phy_write(phy, 0x10, 0x0068);
+                phy_write(phy, 0x16, 0x0001);
+                phy_write(phy, 0x00, 0x8100);
+                phy_write(phy, 0x16, 0x0000);
+                break;
+        }
+
+#if 0
+        data = phy_read(phy, 0x00);
+        data |= 0x8000; /* Reset PHY */
+        phy_write(phy, 0x00, data);
+        udelay(1000);
+#endif
+
+        return  0;
+}
+
 static int et1011c_init(struct mii_phy *phy)
 {
 	u16 reg_short;
@@ -467,12 +572,87 @@ static struct mii_phy_def m88e1112_phy_def = {
 	.ops		= &m88e1112_phy_ops,
 };
 
+static struct mii_phy_ops m88e1141_phy_ops = {
+        .init           = m88e1141_init,
+        .setup_aneg     = genmii_setup_aneg,
+        .setup_forced   = genmii_setup_forced,
+        .poll_link      = genmii_poll_link,
+        .read_link      = genmii_read_link
+};
+
+static struct mii_phy_def m88e1141_phy_def = {
+        .phy_id         = 0x01410CD0,
+        .phy_id_mask    = 0x0ffffff0,
+        .name           = "Marvell 88E1141 Ethernet",
+        .ops            = &m88e1141_phy_ops,
+};
+
+static struct mii_phy *phy_dev;
+
+static void __link_led_brightness_set(unsigned value)
+{
+	u16 reg_short;
+	
+	phy_write(phy_dev, 31, 0x0007);
+	phy_write(phy_dev, 30, 0x002c);
+	
+	reg_short = (u16) phy_read(phy_dev, 26);
+	reg_short &= ~0x0040;
+	phy_write(phy_dev, 26, reg_short);
+
+	reg_short = (u16) phy_read(phy_dev, 28);
+	if(value)
+		reg_short |= 0x0700;
+	else
+		reg_short &= ~0x0700;
+	phy_write(phy_dev, 28, reg_short);
+
+	phy_write(phy_dev, 31, 0x0000);
+}
+
+extern void (*link_led_brightness_set)(unsigned value);
+
+static void lgnas_link_led_init(struct mii_phy *phy)
+{
+	phy_dev = phy;
+	link_led_brightness_set = __link_led_brightness_set;
+}
+
+static int rtl8211cl_init(struct mii_phy *phy)
+{
+        phy_write(phy, 31,0x0002);
+        phy_write(phy, 24,0xA1E0);
+        phy_write(phy, 31,0x0000);
+        
+        lgnas_link_led_init(phy);
+
+        return 0;
+}
+
+static struct mii_phy_ops rtl8211cl_phy_ops = {
+        .init           = rtl8211cl_init,
+        .setup_aneg     = genmii_setup_aneg,
+        .setup_forced   = genmii_setup_forced,
+        .poll_link      = genmii_poll_link,
+        .read_link      = genmii_read_link
+};
+
+static struct mii_phy_def rtl8211cl_phy_def = {
+        .phy_id         = 0x001CC910,   /* 0x01cc912 */
+        .phy_id_mask    = 0xfffffff0,
+        .name           = "Realtek 8211CL Ethernet",
+        .ops            = &rtl8211cl_phy_ops,
+};
+
+
 static struct mii_phy_def *mii_phy_table[] = {
 	&et1011c_phy_def,
 	&cis8201_phy_def,
 	&bcm5248_phy_def,
 	&m88e1111_phy_def,
 	&m88e1112_phy_def,
+	&m88e1141_phy_def,
+	&rtl8211cl_phy_def,
 	&genmii_phy_def,
 	NULL
 };

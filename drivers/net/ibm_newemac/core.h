@@ -34,7 +34,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/spinlock.h>
 #include <linux/of_platform.h>
-#include <linux/slab.h>
 
 #include <asm/io.h>
 #include <asm/dcr.h>
@@ -72,7 +71,7 @@ static inline int emac_rx_size(int mtu)
 #define EMAC_DMA_ALIGN(x)		ALIGN((x), dma_get_cache_alignment())
 
 #define EMAC_RX_SKB_HEADROOM		\
-	EMAC_DMA_ALIGN(CONFIG_IBM_NEW_EMAC_RX_SKB_HEADROOM)
+	EMAC_DMA_ALIGN(CONFIG_IBM_NEW_EMAC_RX_SKB_HEADROOM + 2)
 
 /* Size of RX skb for the given MTU */
 static inline int emac_rx_skb_size(int mtu)
@@ -162,6 +161,11 @@ struct emac_error_stats {
 	u64 tx_errors;
 };
 
+
+#if defined(CONFIG_IBM_EMAC_MAL_QOS_V404)
+#define MAX_VCHANS 8   /* MAX virtual channels */
+#endif
+
 #define EMAC_ETHTOOL_STATS_COUNT	((sizeof(struct emac_stats) + \
 					  sizeof(struct emac_error_stats)) \
 					 / sizeof(u64))
@@ -221,6 +225,11 @@ struct emac_instance {
 
 	/* OPB bus frequency in Mhz */
 	u32				opb_bus_freq;
+	
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	/* PLB bus frequency in Mhz */
+	u32				plb_bus_freq;
+#endif
 
 	/* Cell index within an ASIC (for clk mgmnt) */
 	u32				cell_index;
@@ -267,6 +276,10 @@ struct emac_instance {
 
 	/* Misc
 	 */
+#ifdef CONFIG_IBM_NEW_EMAC_MASK_CEXT
+	atomic_t			idle_mode;
+	atomic_t 			mask_cext_enable;
+#endif
 	int				reset_failed;
 	int				stop_timeout;	/* in us */
 	int				no_mcast;
@@ -274,6 +287,12 @@ struct emac_instance {
 	int				opened;
 	struct work_struct		reset_work;
 	spinlock_t			lock;
+	
+#if defined(CONFIG_IBM_EMAC_MAL_QOS_V404) 
+	int				rx_vchans;   /* N rx virtual channels */
+	int 				vdev_index;
+	struct emac_instance		*vdev[MAX_VCHANS]; /* virtual channels */
+#endif
 };
 
 /*

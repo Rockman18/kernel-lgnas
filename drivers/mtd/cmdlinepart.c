@@ -109,7 +109,9 @@ static struct mtd_partition * newpart(char *s,
 		if (size < PAGE_SIZE)
 		{
 			printk(KERN_ERR ERRP "partition size too small (%lx)\n", size);
+#ifndef CONFIG_MACH_APM
 			return NULL;
+#endif
 		}
 	}
 

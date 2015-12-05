@@ -225,6 +225,15 @@ config CRYPTO_DEV_IXP4XX
 	help
 	  Driver for the IXP4xx NPE crypto engine.
 
+config CRYPTO_DEV_PKA4xx
+        tristate "Support for the AMCC 4xx PKA"
+        depends on PPC
+        help
+          Select this option if you want to have support for the AMCC 4xx PKA.
+
+          To compile this driver as a module, choose M here: the module
+          will be called pka4xx
+
 config CRYPTO_DEV_PPC4XX
 	tristate "Driver AMCC PPC4xx crypto accelerator"
 	depends on PPC && 4xx
@@ -242,5 +251,48 @@ config CRYPTO_DEV_OMAP_SHAM
 	help
 	  OMAP processors have SHA1/MD5 hw accelerator. Select this if you
 	  want to use the OMAP module for SHA1/MD5 algorithms.
+
+config SEC_HW_POLL
+	bool "Turn on HW Polling instead of Doing Force Descriptor Write"
+	depends on CRYPTO_DEV_PPC4XX
+	default n
+	
+config SEC_HW_RING_POLL_FREQ
+	int "Basic HW polling frequency"
+ 	help
+		HW Polling Frequency which the Packet Engine reads a segment of the external PDR
+	depends on CRYPTO_DEV_PPC4XX && SEC_HW_POLL
+	default "2"
+
+config SEC_HW_POLL_RETRY_FREQ
+	int "HW Polling Retry interval"
+	help
+		HW Polling Retry interval that specifies how much Packet
+		Engine wait between re-reads on an invalid descriptor entry
+	depends on CRYPTO_DEV_PPC4XX && SEC_HW_POLL
+	default "1"
+
+config SEC_PD_OCM
+	bool "Security Packet Descriptors on OCM"
+	default n
+	help
+		This enables the Security Packet Descriptors to be allocated on the OCM
+	depends on CRYPTO_DEV_PPC4XX && 460EX
+
+config SEC_SA_OCM
+	bool "Security SA on OCM"
+	default n
+	help
+		This option enables the SA and State Record to be alloctaed on the OCM.
+	depends on CRYPTO_DEV_PPC4XX && 460EX
+		
+config CRYPTO_DEV_ASYNC_SAMPLE
+	tristate "Async crypto and hash sample driver using software algorithms"
+	select CRYPTO_HASH
+	select CRYPTO_ALGAPI
+	select CRYPTO_BLKCIPHER
+	help
+	  This is a sample asynchronous crypto and hash device driver over synchronous
+          software crypto and hash algorithms.
 
 endif # CRYPTO_HW

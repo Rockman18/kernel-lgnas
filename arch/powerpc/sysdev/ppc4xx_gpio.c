@@ -100,11 +100,11 @@ ppc4xx_gpio_set(struct gpio_chip *gc, unsigned int gpio, int val)
 	struct ppc4xx_gpio_chip *chip = to_ppc4xx_gpiochip(mm_gc);
 	unsigned long flags;
 
-	spin_lock_irqsave(&chip->lock, flags);
+//	spin_lock_irqsave(&chip->lock, flags);
 
 	__ppc4xx_gpio_set(gc, gpio, val);
 
-	spin_unlock_irqrestore(&chip->lock, flags);
+//	spin_unlock_irqrestore(&chip->lock, flags);
 
 	pr_debug("%s: gpio: %d val: %d\n", __func__, gpio, val);
 }
@@ -173,6 +173,18 @@ ppc4xx_gpio_dir_out(struct gpio_chip *gc, unsigned int gpio, int val)
 	return 0;
 }
 
+static int ppc4xx_gpio_to_irq(struct gpio_chip *gc, unsigned int gpio)
+{
+	struct device_node *np, *child;
+	enum of_gpio_flags flags;
+	
+	for_each_compatible_node(np, NULL, "ibm,ppc4xx-gpio")
+		for_each_child_of_node(np, child)
+			if(gpio == of_get_gpio_flags(child, 0, &flags))
+				return irq_of_parse_and_map(child, 0);
+	return -ENXIO;
+}
+
 static int __init ppc4xx_add_gpiochips(void)
 {
 	struct device_node *np;
@@ -199,6 +211,7 @@ static int __init ppc4xx_add_gpiochips(void)
 		gc->direction_output = ppc4xx_gpio_dir_out;
 		gc->get = ppc4xx_gpio_get;
 		gc->set = ppc4xx_gpio_set;
+		gc->to_irq = ppc4xx_gpio_to_irq;
 
 		ret = of_mm_gpiochip_add(np, mm_gc);
 		if (ret)

@@ -21,7 +21,6 @@
  * option) any later version.
  *
  */
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/ethtool.h>
 #include <asm/io.h>
@@ -121,8 +120,7 @@ int __devinit zmii_attach(struct platform_device *ofdev, int input, int *mode)
 			dev->mode = *mode;
 
 		printk(KERN_NOTICE "%s: bridge in %s mode\n",
-		       ofdev->dev.of_node->full_name,
-		       zmii_mode_name(dev->mode));
+		       ofdev->dev.of_node->full_name, zmii_mode_name(dev->mode));
 	} else {
 		/* All inputs must use the same mode */
 		if (*mode != PHY_MODE_NA && *mode != dev->mode) {
@@ -227,7 +225,7 @@ void *zmii_dump_regs(struct platform_device *ofdev, void *buf)
 			 * zmii ? if yes, then we'll add a cell_index
 			 * like we do for emac
 			 */
-	memcpy_fromio(regs, dev->base, sizeof(struct zmii_regs));
+	memcpy(regs, dev->base, sizeof(struct zmii_regs));
 	return regs + 1;
 }
 
@@ -315,7 +313,6 @@ static struct of_device_id zmii_match[] =
 static struct of_platform_driver zmii_driver = {
 	.driver = {
 		.name = "emac-zmii",
-		.owner = THIS_MODULE,
 		.of_match_table = zmii_match,
 	},
 	.probe = zmii_probe,

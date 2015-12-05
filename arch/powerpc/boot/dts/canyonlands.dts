@@ -95,6 +95,20 @@
 		interrupt-parent = <&UIC0>;
 	};
 
+	OCM1: ocm@400040000 {
+		compatible = "ibm,ocm";
+		status = "enabled";
+		cell-index = <1>;
+		/* configured in U-Boot */
+		reg = <4 0x00040000 0x10000>; /* 64K */
+	};
+
+        CPM0: cpm {
+                compatible = "ibm,cpm-460ex","ibm,cpm";
+                cell-index = <0>;
+                dcr-reg = <0x160 0x003>;
+        };
+
 	SDR0: sdr {
 		compatible = "ibm,sdr-460ex";
 		dcr-reg = <0x00e 0x002>;
@@ -134,8 +148,25 @@
 			interrupts = <0x1d 0x4>;
 		};
 
+		PKA: pka@114000 {
+			device_type = "pka";
+			compatible = "ppc4xx-pka", "amcc, ppc4xx-pka";
+			reg = <4 0x00114000 0x4000>;
+			interrupt-parent = <&UIC0>;
+			interrupts = <0x14 0x2>;
+		};
+
+		TRNG: trng@110000 {
+			device_type = "trng";
+			compatible = "ppc4xx-trng", "amcc, ppc4xx-trng";
+			reg = <4 0x00110000 0x100>;
+			interrupt-parent = <&UIC1>;
+			interrupts = <0x3 0x2>;
+		};
+
 		MAL0: mcmal {
 			compatible = "ibm,mcmal-460ex", "ibm,mcmal2";
+			descriptor-memory = "ocm";
 			dcr-reg = <0x180 0x062>;
 			num-tx-chans = <2>;
 			num-rx-chans = <16>;
@@ -146,7 +177,11 @@
 					/*RXEOB*/ 0x7 0x4
 					/*SERR*/  0x3 0x4
 					/*TXDE*/  0x4 0x4
-					/*RXDE*/  0x5 0x4>;
+					/*RXDE*/  0x5 0x4
+					/*TX0 COAL*/  0x8 0x2
+					/*TX1 COAL*/  0x9 0x2
+					/*RX0 COAL*/  0xc 0x2
+					/*RX1 COAL*/  0xd 0x2 >;
 		};
 
 		USB0: ehci@bffd0400 {
@@ -163,12 +198,41 @@
 			interrupts = <0x1e 4>;
 		};
 
+		USBOTG0: usbotg@bff80000 {
+			compatible = "amcc,usb-otg-460ex";
+			reg = <4 0xbff80000 0x10000>;
+			interrupt-parent = <&USBOTG0>;
+			interrupts = <0 1 2>;
+			#interrupt-cells = <1>;
+			#address-cells = <0>;
+			#size-cells = <0>;
+			interrupt-map = </* USB-OTG */ 0 &UIC2 0x1c 4
+					 /* HIGH-POWER */ 1 &UIC1 0x1a 8
+					 /* DMA */ 2 &UIC0 0xc 4>;
+		};
+
 		SATA0: sata@bffd1000 {
 			compatible = "amcc,sata-460ex";
-			reg = <4 0xbffd1000 0x800 4 0xbffd0800 0x400>;
+			reg = <4 0xbffd1000 0x800	/* SATA */
+			       4 0xbffd0800 0x400>;	/* AHBDMA */
 			interrupt-parent = <&UIC3>;
-			interrupts = <0x0 0x4       /* SATA */
-				      0x5 0x4>;     /* AHBDMA */
+			interrupts = <0x0 0x4	/* SATA */
+				      	  0x5 0x4>;	/* AHBDMA */
+		};
+
+                ADMA: adma {
+                        compatible = "amcc,adma";
+                        device_type = "dma";
+			descriptor-memory = "ocm";
+                        reg = <4 00100200 80>;
+                        interrupt-parent = <&ADMA>;
+                        interrupts =<0 1 2>;
+                        #interrupt-cells = <1>;
+                        #address-cells = <0>;
+                        #size-cells = <0>;
+                        interrupt-map = </*FIFO need service */ 0 &UIC0 0x16 4
+                                         /*FIFO FULL */         1 &UIC0 0x15 4
+                                         /*FIFO HSDMA err */    2 &UIC1 0x16 4>;
 		};
 
 		POB0: opb {
@@ -185,6 +249,7 @@
 				#size-cells = <1>;
 				clock-frequency = <0>; /* Filled in by U-Boot */
 				/* ranges property is supplied by U-Boot */
+				ranges = < 0x00000003 0x00000000 0xe0000000 0x8000000>;
 				interrupts = <0x6 0x4>;
 				interrupt-parent = <&UIC1>;
 
@@ -226,7 +291,7 @@
 
 				ndfc@3,0 {
 					compatible = "ibm,ndfc";
-					reg = <0x00000003 0x00000000 0x00002000>;
+					reg = <00000003 00000000 00002000>;
 					ccr = <0x00001000>;
 					bank-settings = <0x80002222>;
 					#address-cells = <1>;
@@ -236,13 +301,29 @@
 						#address-cells = <1>;
 						#size-cells = <1>;
 
-						partition@0 {
-							label = "u-boot";
-							reg = <0x00000000 0x00100000>;
+						partition@0,0 {
+							label = "NAND 128MiB 3,3V 8-bit";
+							reg = <0 0x8000000>;
 						};
-						partition@100000 {
-							label = "user";
-							reg = <0x00000000 0x03f00000>;
+						partition@0,1 {
+							label = "rescue img";
+							reg = <0 0x1200000>;
+						};
+						partition@1200000 {
+							label = "config img";
+							reg = <0x1200000 0x400000>;
+						};
+						partition@1600000 {
+							label = "firmware img";
+							reg = <0x1600000 0x6400000>;
+						};
+						partition@7a00000 {
+							label = "kernel img";
+							reg = <0x7a00000 0x500000>;
+						};
+						partition@7f00000 {
+							label = "device tree img";
+							reg = <0x7f00000 0x100000>;
 						};
 					};
 				};
@@ -358,7 +439,7 @@
 				mal-rx-channel = <0>;
 				cell-index = <0>;
 				max-frame-size = <9000>;
-				rx-fifo-size = <4096>;
+				rx-fifo-size = <16384>;
 				tx-fifo-size = <2048>;
 				rx-fifo-size-gige = <16384>;
 				phy-mode = "rgmii";
@@ -388,7 +469,7 @@
 				mal-rx-channel = <8>;
 				cell-index = <1>;
 				max-frame-size = <9000>;
-				rx-fifo-size = <4096>;
+				rx-fifo-size = <16384>;
 				tx-fifo-size = <2048>;
 				rx-fifo-size-gige = <16384>;
 				phy-mode = "rgmii";
@@ -400,6 +481,47 @@
 				has-inverted-stacr-oc;
 				has-new-stacr-staopc;
 				mdio-device = <&EMAC0>;
+			};
+		};
+
+		DMA: plb_dma@400300200 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "amcc,dma";
+			cell-index = <0>;
+			reg = <4 00300200 200>;
+			dcr-reg = <0x100 0x13f>;
+			interrupt-parent = <&UIC0>;
+			interrupts = <0 1 2 3>;
+			interrupt-map = < /*chan 0*/ 0 &UIC0 12 4
+					  /* chan1*/ 1 &UIC0 13 4
+					  /* chan2*/ 2 &UIC0 14 4
+					  /* chan3*/ 3 &UIC0 15 4>;
+
+
+			dma-4channel@0{
+				compatible = "amcc,dma-4channel";
+				cell-index = <0>;
+				label = "channel0";
+				reg = <0x100 0x107>;
+			};
+			dma-4channel@1 {
+				compatible = "amcc,dma-4channel";
+				cell-index = <1>;
+				label = "channel1";
+				reg = <0x108 0x10f>;
+			};
+			dma-4channel@2 {
+				compatible = "amcc,dma-4channel";
+				cell-index = <2>;
+				label = "channel2";
+				reg = <0x110 0x117>;
+			};
+			dma-4channel@3 {
+				compatible = "amcc,dma-4channel";
+				cell-index = <3>;
+				label = "channel3";
+				reg = <0x118 0x11f>;
 			};
 		};
 

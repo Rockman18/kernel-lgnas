@@ -165,6 +165,22 @@ config MULTICORE_RAID456
 
 	  If unsure, say N.
 
+config MD_RAID_SKIP_BIO_COPY
+        bool "Skip intermediate bio->cache copy"
+        depends on MD_RAID456
+        default n
+	        ---help---
+          Skip intermediate data copying between the bio requested to write and
+          the disk cache in <sh> if the full-stripe write operation is on the
+          way. This might improve the performance of write operations in some
+          dedicated cases but generally eliminating disk cache slows the
+          performance down.
+
+          If unsure, say N.
+
+config RAID6_PQ
+	tristate
+
 config MD_MULTIPATH
 	tristate "Multipath I/O support"
 	depends on BLK_DEV_MD

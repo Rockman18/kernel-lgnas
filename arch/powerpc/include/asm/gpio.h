@@ -14,6 +14,11 @@
 #ifndef __ASM_POWERPC_GPIO_H
 #define __ASM_POWERPC_GPIO_H
 
+#ifdef CONFIG_APM82181
+#undef ARCH_NR_GPIOS
+#define	ARCH_NR_GPIOS	32
+#endif
+
 #include <linux/errno.h>
 #include <asm-generic/gpio.h>
 

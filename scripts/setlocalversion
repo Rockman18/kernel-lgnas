@@ -8,7 +8,6 @@
 # <nico-linuxsetlocalversion -at- schottelius.org>.
 #
 #
-
 usage() {
 	echo "Usage: $0 [--save-scmversion] [srctree]" >&2
 	exit 1
@@ -155,17 +154,18 @@ fi
 # CONFIG_LOCALVERSION and LOCALVERSION (if set)
 res="${res}${CONFIG_LOCALVERSION}${LOCALVERSION}"
 
-# scm version string if not at a tagged commit
-if test "$CONFIG_LOCALVERSION_AUTO" = "y"; then
-	# full scm version string
-	res="$res$(scm_version)"
-else
-	# apped a plus sign if the repository is not in a clean tagged
-	# state and  LOCALVERSION= is not specified
-	if test "${LOCALVERSION+set}" != "set"; then
-		scm=$(scm_version --short)
-		res="$res${scm:++}"
-	fi
-fi
-
+## scm version string if not at a tagged commit
+#if test "$CONFIG_LOCALVERSION_AUTO" = "y"; then
+#	# full scm version string
+#	res="$res$(scm_version)"
+#else
+#	# apped a plus sign if the repository is not in a clean tagged
+#	# state and  LOCALVERSION= is not specified
+#	if test "${LOCALVERSION+set}" != "set"; then
+#		#scm=$(scm_version --short)
+#		#res="$res${scm:++}"
+#		scm=$(printf %02d $CONFIG_KERNEL_REVISION)
+#		res="${res}_${CONFIG_LGNAS_MODEL}-${scm}"
+#	fi
+#fi
 echo "$res"

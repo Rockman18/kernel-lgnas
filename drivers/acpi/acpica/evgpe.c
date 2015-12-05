@@ -534,6 +534,9 @@ static void acpi_ev_asynch_enable_gpe(void *context)
 	return_VOID;
 }
 
+#ifdef CONFIG_MACH_NS2 
+extern void sci_btn_handler(void);
+#endif
 /*******************************************************************************
  *
  * FUNCTION:    acpi_ev_gpe_dispatch
@@ -574,6 +577,24 @@ acpi_ev_gpe_dispatch(struct acpi_gpe_event_info *gpe_event_info, u32 gpe_number)
 		}
 	}
 
+#ifdef CONFIG_MACH_NS2 
+	switch(gpe_number){
+		case 0x1C:
+		case 0x1D:
+		case 0x1E:
+		sci_btn_handler();
+		//clear
+		status = acpi_hw_clear_gpe(gpe_event_info);
+		if(ACPI_FAILURE(status)) {
+				ACPI_EXCEPTION((AE_INFO, status,
+				"Unable to clear GPE[%2X]",
+				gpe_number));
+			return_UINT32(ACPI_INTERRUPT_NOT_HANDLED);
+		}
+		//enable gpe
+		return_UINT32(ACPI_INTERRUPT_HANDLED);
+	}
+#endif
 	/*
 	 * Dispatch the GPE to either an installed handler, or the control method
 	 * associated with this GPE (_Lxx or _Exx). If a handler exists, we invoke

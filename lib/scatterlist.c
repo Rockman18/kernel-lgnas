@@ -517,3 +517,132 @@ size_t sg_copy_to_buffer(struct scatterlist *sgl, unsigned int nents,
 	return sg_copy_buffer(sgl, nents, buf, buflen, 1);
 }
 EXPORT_SYMBOL(sg_copy_to_buffer);
+
+/*
+ * Can switch to the next dst_sg element, so, to copy to strictly only
+ * one dst_sg element, it must be either last in the chain, or
+ * copy_len == dst_sg->length.
+ */
+static int sg_copy_elem(struct scatterlist **pdst_sg, size_t *pdst_len,
+			size_t *pdst_offs, struct scatterlist *src_sg,
+			size_t copy_len,
+			enum km_type d_km_type, enum km_type s_km_type)
+{
+	int res = 0;
+	struct scatterlist *dst_sg;
+	size_t src_len, dst_len, src_offs, dst_offs;
+	struct page *src_page, *dst_page;
+
+	dst_sg = *pdst_sg;
+	dst_len = *pdst_len;
+	dst_offs = *pdst_offs;
+	dst_page = sg_page(dst_sg);
+
+	src_page = sg_page(src_sg);
+	src_len = src_sg->length;
+	src_offs = src_sg->offset;
+
+	do {
+		void *saddr, *daddr;
+		size_t n;
+
+		saddr = kmap_atomic(src_page +
+					 (src_offs >> PAGE_SHIFT), s_km_type) +
+				    (src_offs & ~PAGE_MASK);
+		daddr = kmap_atomic(dst_page +
+					(dst_offs >> PAGE_SHIFT), d_km_type) +
+				    (dst_offs & ~PAGE_MASK);
+
+		if (((src_offs & ~PAGE_MASK) == 0) &&
+		    ((dst_offs & ~PAGE_MASK) == 0) &&
+		    (src_len >= PAGE_SIZE) && (dst_len >= PAGE_SIZE) &&
+		    (copy_len >= PAGE_SIZE)) {
+			copy_page(daddr, saddr);
+			n = PAGE_SIZE;
+		} else {
+			n = min_t(size_t, PAGE_SIZE - (dst_offs & ~PAGE_MASK),
+					  PAGE_SIZE - (src_offs & ~PAGE_MASK));
+			n = min(n, src_len);
+			n = min(n, dst_len);
+			n = min_t(size_t, n, copy_len);
+			memcpy(daddr, saddr, n);
+		}
+		dst_offs += n;
+		src_offs += n;
+
+		kunmap_atomic(saddr, s_km_type);
+		kunmap_atomic(daddr, d_km_type);
+
+		res += n;
+		copy_len -= n;
+		if (copy_len == 0)
+			goto out;
+
+		src_len -= n;
+		dst_len -= n;
+		if (dst_len == 0) {
+			dst_sg = sg_next(dst_sg);
+			if (dst_sg == NULL)
+				goto out;
+			dst_page = sg_page(dst_sg);
+			dst_len = dst_sg->length;
+			dst_offs = dst_sg->offset;
+		}
+	} while (src_len > 0);
+
+out:
+	*pdst_sg = dst_sg;
+	*pdst_len = dst_len;
+	*pdst_offs = dst_offs;
+	return res;
+}
+
+/**
+ * sg_copy - copy one SG vector to another
+ * @dst_sg:	destination SG
+ * @src_sg:	source SG
+ * @nents_to_copy: maximum number of entries to copy
+ * @copy_len:	maximum amount of data to copy. If 0, then copy all.
+ * @d_km_type:	kmap_atomic type for the destination SG
+ * @s_km_type:	kmap_atomic type for the source SG
+ *
+ * Description:
+ *    Data from the source SG vector will be copied to the destination SG
+ *    vector. End of the vectors will be determined by sg_next() returning
+ *    NULL. Returns number of bytes copied.
+ */
+int sg_copy(struct scatterlist *dst_sg, struct scatterlist *src_sg,
+	    int nents_to_copy, size_t copy_len,
+	    enum km_type d_km_type, enum km_type s_km_type)
+{
+	int res = 0;
+	size_t dst_len, dst_offs;
+
+	if (copy_len == 0)
+		copy_len = 0x7FFFFFFF; /* copy all */
+
+	if (nents_to_copy == 0)
+		nents_to_copy = 0x7FFFFFFF; /* copy all */
+
+	dst_len = dst_sg->length;
+	dst_offs = dst_sg->offset;
+
+	do {
+		int copied = sg_copy_elem(&dst_sg, &dst_len, &dst_offs,
+				src_sg, copy_len, d_km_type, s_km_type);
+		copy_len -= copied;
+		res += copied;
+		if ((copy_len == 0) || (dst_sg == NULL))
+			goto out;
+
+		nents_to_copy--;
+		if (nents_to_copy == 0)
+			goto out;
+
+		src_sg = sg_next(src_sg);
+	} while (src_sg != NULL);
+
+out:
+	return res;
+}
+EXPORT_SYMBOL(sg_copy);

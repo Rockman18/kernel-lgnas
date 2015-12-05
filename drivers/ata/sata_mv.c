@@ -1332,6 +1332,15 @@ static unsigned int mv_scr_offset(unsigned int sc_reg_in)
 	return ofs;
 }
 
+// anyong
+void sata_ssc_enable( struct ata_port * ap )
+{
+	void __iomem *port_mmio = mv_ap_base(ap);
+	writelfl(readl(port_mmio + 0x50) | 0x40, port_mmio + 0x50);
+	writelfl(readl(port_mmio + 0x310) & ~(0x100000), port_mmio + 0x310);
+	printk("Turning on SATA Port SSC (%s) (%p= %x)\n", readl(port_mmio + 0x310) & 0x100000 ? "On":"Off", port_mmio+0x50, readl(port_mmio + 0x50) );
+}
+
 static int mv_scr_read(struct ata_link *link, unsigned int sc_reg_in, u32 *val)
 {
 	unsigned int ofs = mv_scr_offset(sc_reg_in);

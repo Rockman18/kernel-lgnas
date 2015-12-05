@@ -82,6 +82,7 @@
 #define ETH_P_FCOE	0x8906		/* Fibre Channel over Ethernet  */
 #define ETH_P_FIP	0x8914		/* FCoE Initialization Protocol */
 #define ETH_P_EDSA	0xDADA		/* Ethertype DSA [ NOT AN OFFICIALLY REGISTERED ID ] */
+#define ETH_P_MACSEC	0x88C5		/* MACSEC Hdr Type */
 
 /*
  *	Non DIX types. Won't clash for 1500 types.

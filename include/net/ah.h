@@ -11,9 +11,36 @@ struct crypto_ahash;
 struct ah_data {
 	int			icv_full_len;
 	int			icv_trunc_len;
-
 	struct crypto_ahash	*ahash;
+	union {
+		struct crypto_hash	*tfm;
+		struct crypto_ahash	*atfm;
+		struct crypto_aead	*aeadtfm;
+	} utfm;
 };
+#if 0
+static inline int ah_mac_digest(struct ah_data *ahp, struct sk_buff *skb,
+				u8 *auth_data)
+{
+	struct hash_desc desc;
+	int err;
+
+	desc.tfm = ahp->utfm.tfm;
+	desc.flags = 0;
+
+	memset(auth_data, 0, ahp->icv_trunc_len);
+	err = crypto_hash_init(&desc);
+	if (unlikely(err))
+		goto out;
+	err = skb_icv_walk(skb, &desc, 0, skb->len, crypto_hash_update);
+	if (unlikely(err))
+		goto out;
+	err = crypto_hash_final(&desc, ahp->work_icv);
+
+out:
+	return err;
+}
+#endif
 
 struct ip_auth_hdr;
 

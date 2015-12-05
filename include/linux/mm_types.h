@@ -100,6 +100,18 @@ struct page {
 	 */
 	void *shadow;
 #endif
+
+#if defined(CONFIG_TCP_ZERO_COPY_TRANSFER_COMPLETION_NOTIFICATION)
+	/*
+	 * Used to implement support for notification on zero-copy TCP transfer
+	 * completion. It might look as not good to have this field here and
+	 * it's better to have it in struct sk_buff, but it would make the code
+	 * much more complicated and fragile, since all skb then would have to
+	 * contain only pages with the same value in this field.
+	 */
+	 void *net_priv;
+#endif
+
 };
 
 /*

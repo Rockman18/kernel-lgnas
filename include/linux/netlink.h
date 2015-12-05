@@ -25,6 +25,10 @@
 #define NETLINK_SCSITRANSPORT	18	/* SCSI Transports */
 #define NETLINK_ECRYPTFS	19
 
+#ifdef CONFIG_PPC4xx_CPM
+#define NETLINK_KCPM	20	/* Kernel messages to userspace */
+#endif
+
 #define MAX_LINKS 32		
 
 struct sockaddr_nl {

@@ -649,7 +649,11 @@ static const struct spi_device_id m25p_ids[] = {
 	/* Macronix */
 	{ "mx25l4005a",  INFO(0xc22013, 0, 64 * 1024,   8, SECT_4K) },
 	{ "mx25l8005",   INFO(0xc22014, 0, 64 * 1024,  16, 0) },
+#ifdef CONFIG_MACH_LGNAS
+	{ "mx25l3206e",  INFO(0xc22016, 0, 64 * 1024,  64, SECT_4K) },
+#else
 	{ "mx25l3205d",  INFO(0xc22016, 0, 64 * 1024,  64, 0) },
+#endif
 	{ "mx25l6405d",  INFO(0xc22017, 0, 64 * 1024, 128, 0) },
 	{ "mx25l12805d", INFO(0xc22018, 0, 64 * 1024, 256, 0) },
 	{ "mx25l12855e", INFO(0xc22618, 0, 64 * 1024, 256, 0) },
@@ -840,8 +844,10 @@ static int __devinit m25p_probe(struct spi_device *spi)
 	 * up with the software protection bits set
 	 */
 
+  /* nt1/nc2-1/nt-1/nc2 old uboot does software protection bin set */
 	if (info->jedec_id >> 16 == 0x1f ||
 	    info->jedec_id >> 16 == 0x89 ||
+      info->jedec_id >> 16 == 0xc2 ||
 	    info->jedec_id >> 16 == 0xbf) {
 		write_enable(flash);
 		write_sr(flash, 0);

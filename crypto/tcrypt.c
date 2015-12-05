@@ -1140,7 +1140,6 @@ static int do_test(int m)
 
 	case 399:
 		break;
-
 	case 400:
 		/* fall through */
 
@@ -1213,6 +1212,18 @@ static int do_test(int m)
 		if (mode > 400 && mode < 500) break;
 
 	case 499:
+		break;
+
+	case 500
+		tcrypt_test("f8(kasumi)");
+		break;
+
+	case 501:
+		tcrypt_test("kasumi");
+		break;
+
+	case 502:
+		tcrypt_test("f9(kasumi)");
 		break;
 
 	case 1000:

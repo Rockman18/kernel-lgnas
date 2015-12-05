@@ -28,6 +28,34 @@
 #include <linux/kernel.h>
 #include <linux/usb/hcd.h>
 
+#ifdef CONFIG_4xx
+#define SWAP16(A) \
+    ((((A) & 0xFF00) >> 8) | \
+    (((A) & 0x00FF) << 8))
+
+#define SWAP32(A) \
+    ((((A) & 0xFF000000) >> 24) | \
+    (((A)  & 0x00FF0000) >> 8)  | \
+    (((A)  & 0x0000FF00) << 8)  | \
+    (((A)  & 0x000000FF) << 24))
+
+
+#define SWAP64(A) \
+    (((u64)(A) << 56) | \
+    (((u64)(A) << 40) & 0xff000000000000ULL) | \
+    (((u64)(A) << 24) & 0xff0000000000ULL) | \
+    (((u64)(A) << 8)  & 0xff00000000ULL) | \
+    (((u64)(A) >> 8)  & 0xff000000ULL) | \
+    (((u64)(A) >> 24) & 0xff0000ULL) | \
+    (((u64)(A) >> 40) & 0xff00ULL) | \
+    ((u64)(A)  >> 56))
+
+#else
+#define SWAP16(A) A
+#define SWAP32(A) A
+#define SWAP64(A) A
+#endif
+
 /* Code sharing between pci-quirks and xhci hcd */
 #include	"xhci-ext-caps.h"
 
@@ -1478,5 +1506,11 @@ int xhci_hub_status_data(struct usb_hcd *hcd, char *buf);
 struct xhci_input_control_ctx *xhci_get_input_control_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx);
 struct xhci_slot_ctx *xhci_get_slot_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx);
 struct xhci_ep_ctx *xhci_get_ep_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx, unsigned int ep_index);
+
+void swap_container_ctx(struct xhci_hcd *xhci,
+                   struct xhci_container_ctx *ctx);
+void swap_input_control_ctx(struct xhci_input_control_ctx *ctx);
+void swap_slot_ctx(struct xhci_slot_ctx *ctx);
+void swap_ep_ctx(struct xhci_ep_ctx *ctx);
 
 #endif /* __LINUX_XHCI_HCD_H */

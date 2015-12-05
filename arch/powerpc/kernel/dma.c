@@ -144,8 +144,8 @@ struct dma_map_ops dma_direct_ops = {
 	.map_page	= dma_direct_map_page,
 	.unmap_page	= dma_direct_unmap_page,
 #ifdef CONFIG_NOT_COHERENT_CACHE
-	.sync_single_for_cpu 		= dma_direct_sync_single,
-	.sync_single_for_device 	= dma_direct_sync_single,
+	.sync_single_for_cpu		= dma_direct_sync_single,
+	.sync_single_for_device		= dma_direct_sync_single,
 	.sync_sg_for_cpu 		= dma_direct_sync_sg,
 	.sync_sg_for_device 		= dma_direct_sync_sg,
 #endif

@@ -21,7 +21,6 @@
  * option) any later version.
  *
  */
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/ethtool.h>
 #include <asm/io.h>
@@ -223,7 +222,7 @@ void *rgmii_dump_regs(struct platform_device *ofdev, void *buf)
 			 * rgmii ? if yes, then we'll add a cell_index
 			 * like we do for emac
 			 */
-	memcpy_fromio(regs, dev->base, sizeof(struct rgmii_regs));
+	memcpy(regs, dev->base, sizeof(struct rgmii_regs));
 	return regs + 1;
 }
 
@@ -321,7 +320,6 @@ static struct of_device_id rgmii_match[] =
 static struct of_platform_driver rgmii_driver = {
 	.driver = {
 		.name = "emac-rgmii",
-		.owner = THIS_MODULE,
 		.of_match_table = rgmii_match,
 	},
 	.probe = rgmii_probe,

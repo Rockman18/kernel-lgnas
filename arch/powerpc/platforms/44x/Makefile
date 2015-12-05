@@ -6,3 +6,6 @@ obj-$(CONFIG_WARP)	+= warp.o
 obj-$(CONFIG_XILINX_VIRTEX_5_FXT) += virtex.o
 obj-$(CONFIG_XILINX_ML510) += virtex_ml510.o
 obj-$(CONFIG_ISS4xx)	+= iss4xx.o
+obj-$(CONFIG_MACH_NC3)	+= nc3.o
+obj-$(CONFIG_MACH_NC5)	+= nc5.o
+obj-$(CONFIG_MACH_NT3)	+= nt3.o

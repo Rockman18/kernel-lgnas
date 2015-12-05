@@ -76,6 +76,14 @@ MODULE_ALIAS_SCSI_DEVICE(TYPE_WORM);
 	 CDC_CD_R|CDC_CD_RW|CDC_DVD|CDC_DVD_R|CDC_DVD_RAM|CDC_GENERIC_PACKET| \
 	 CDC_MRW|CDC_MRW_W|CDC_RAM)
 
+#if defined(CONFIG_MACH_NT1) || \
+    defined(CONFIG_MACH_NT11) || \
+    defined(CONFIG_MACH_NT3)
+/* NT1 ESK added */
+Scsi_CD *gScsi_cd;
+EXPORT_SYMBOL(gScsi_cd);
+#endif
+
 static int sr_probe(struct device *);
 static int sr_remove(struct device *);
 static int sr_done(struct scsi_cmnd *);
@@ -245,6 +253,12 @@ out:
 				     GFP_KERNEL);
 	cd->previous_state = retval;
 	kfree(sshdr);
+
+#if defined(CONFIG_MACH_NT1) || defined(CONFIG_MACH_NT11)
+	/* NT1 ESK added*/
+	memcpy(gScsi_cd, cd, sizeof(struct scsi_cd));
+	memcpy(&gScsi_cd->cdi, &cd->cdi, sizeof(struct cdrom_device_info));
+#endif
 
 	return retval;
 }
@@ -654,6 +668,16 @@ static int sr_probe(struct device *dev)
 	if (register_cdrom(&cd->cdi))
 		goto fail_put;
 
+#if defined(CONFIG_MACH_NT1) || defined(CONFIG_MACH_NT11)
+	/* NT1 ESK added */
+	gScsi_cd = kzalloc(sizeof(*cd), GFP_KERNEL);
+	gScsi_cd->disk = kzalloc(sizeof(*disk), GFP_KERNEL);
+	memcpy(gScsi_cd, cd, sizeof(struct scsi_cd));
+	memcpy(&gScsi_cd->cdi, &cd->cdi, sizeof(struct cdrom_device_info));
+	memcpy(gScsi_cd->disk, cd->disk, sizeof(struct gendisk));
+/*	printk(" ESK : cdrom name %s, scsi_cd=%d, cdi=%d\n\n", gScsi_cd->cdi.name,
+			sizeof(*cd), sizeof(cd->cdi)	); */
+#endif
 	dev_set_drvdata(dev, cd);
 	disk->flags |= GENHD_FL_REMOVABLE;
 	add_disk(disk);

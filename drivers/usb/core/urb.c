@@ -10,10 +10,15 @@
 
 #define to_urb(d) container_of(d, struct urb, kref)
 
+void (*usb_led_act)(int act);
+
 
 static void urb_destroy(struct kref *kref)
 {
 	struct urb *urb = to_urb(kref);
+
+	if(usb_led_act)
+		usb_led_act(0);
 
 	if (urb->transfer_flags & URB_FREE_BUFFER)
 		kfree(urb->transfer_buffer);
@@ -38,6 +43,8 @@ static void urb_destroy(struct kref *kref)
 void usb_init_urb(struct urb *urb)
 {
 	if (urb) {
+		if(usb_led_act)
+			usb_led_act(1);
 		memset(urb, 0, sizeof(*urb));
 		kref_init(&urb->kref);
 		INIT_LIST_HEAD(&urb->anchor_list);

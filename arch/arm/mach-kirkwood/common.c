@@ -997,7 +997,9 @@ void __init kirkwood_init(void)
 	kirkwood_wdt_init();
 	kirkwood_xor0_init();
 	kirkwood_xor1_init();
+#ifdef CONFIG_CRYPTO_DEV_MV_CESA
 	kirkwood_crypto_init();
+#endif
 }
 
 static int __init kirkwood_clock_gate(void)

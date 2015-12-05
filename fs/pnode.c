@@ -289,6 +289,8 @@ out:
 static inline int do_refcount_check(struct vfsmount *mnt, int count)
 {
 	int mycount = atomic_read(&mnt->mnt_count) - mnt->mnt_ghosts;
+
+	printk("%s: mycount:%d count:%d\n", __func__, mycount, count );
 	return (mycount > count);
 }
 
@@ -307,6 +309,7 @@ int propagate_mount_busy(struct vfsmount *mnt, int refcnt)
 	struct vfsmount *m, *child;
 	struct vfsmount *parent = mnt->mnt_parent;
 	int ret = 0;
+
 
 	if (mnt == parent)
 		return do_refcount_check(mnt, refcnt);

@@ -141,6 +141,14 @@ int crypto_shash_final(struct shash_desc *desc, u8 *out)
 }
 EXPORT_SYMBOL_GPL(crypto_shash_final);
 
+int crypto_shash_partial(struct shash_desc *desc, u8 *out)
+{
+	struct crypto_shash *tfm = desc->tfm;
+	struct shash_alg *shash = crypto_shash_alg(tfm);
+
+	return shash->partial(desc, out);
+}
+
 static int shash_finup_unaligned(struct shash_desc *desc, const u8 *data,
 				 unsigned int len, u8 *out)
 {
@@ -399,6 +407,13 @@ static int shash_compat_final(struct hash_desc *hdesc, u8 *out)
 	return crypto_shash_final(*descp, out);
 }
 
+static int shash_compat_partial(struct hash_desc *hdesc, u8 *out)
+{
+	struct shash_desc **descp = crypto_hash_ctx(hdesc->tfm);
+	
+	return crypto_shash_partial(*descp, out);
+}
+
 static int shash_compat_digest(struct hash_desc *hdesc, struct scatterlist *sg,
 			       unsigned int nbytes, u8 *out)
 {
@@ -476,8 +491,10 @@ static int crypto_init_shash_ops_compat(struct crypto_tfm *tfm)
 	crt->final  = shash_compat_final;
 	crt->digest = shash_compat_digest;
 	crt->setkey = shash_compat_setkey;
-
 	crt->digestsize = alg->digestsize;
+
+	crt->partial = shash_compat_partial;
+	crt->partialsize = alg->partialsize;
 
 	return 0;
 }

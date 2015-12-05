@@ -629,6 +629,8 @@ extern unsigned long blk_max_low_pfn, blk_max_pfn;
 #define BLK_DEFAULT_SG_TIMEOUT	(60 * HZ)
 #define BLK_MIN_SG_TIMEOUT	(7 * HZ)
 
+#define SCSI_EXEC_REQ_FIFO_DEFINED
+
 #ifdef CONFIG_BOUNCE
 extern int init_emergency_isa_pool(void);
 extern void blk_queue_bounce(struct request_queue *q, struct bio **bio);
@@ -746,6 +748,9 @@ extern int blk_rq_map_kern(struct request_queue *, struct request *, void *, uns
 extern int blk_rq_map_user_iov(struct request_queue *, struct request *,
 			       struct rq_map_data *, struct sg_iovec *, int,
 			       unsigned int, gfp_t);
+extern int blk_rq_map_kern_sg(struct request *rq, struct scatterlist *sgl,
+			      int nents, gfp_t gfp);
+extern void blk_rq_unmap_kern_sg(struct request *rq, int err);
 extern int blk_execute_rq(struct request_queue *, struct gendisk *,
 			  struct request *, int);
 extern void blk_execute_rq_nowait(struct request_queue *, struct gendisk *,

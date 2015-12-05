@@ -317,6 +317,7 @@ static int command_abort(struct scsi_cmnd *srb)
 	struct us_data *us = host_to_us(srb->device->host);
 
 	US_DEBUGP("%s called\n", __func__);
+	printk("%s called\n", __func__);
 
 	/* us->srb together with the TIMED_OUT, RESETTING, and ABORTING
 	 * bits are protected by the host lock. */
@@ -337,6 +338,7 @@ static int command_abort(struct scsi_cmnd *srb)
 	set_bit(US_FLIDX_TIMED_OUT, &us->dflags);
 	if (!test_bit(US_FLIDX_RESETTING, &us->dflags)) {
 		set_bit(US_FLIDX_ABORTING, &us->dflags);
+		printk("%s usb_stor_stop_transport \n", __func__);
 		usb_stor_stop_transport(us);
 	}
 	scsi_unlock(us_to_host(us));

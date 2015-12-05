@@ -616,8 +616,18 @@ ssize_t tcp_splice_read(struct socket *sock, loff_t *ppos,
 	/*
 	 * We can't seek on a socket input
 	 */
-	if (unlikely(*ppos))
+	if (unlikely(ppos)) {
+		printk(KERN_ERR "%s:%s:%d\n"
+			"returning ESPIPE\n", __FUNCTION__, __FILE__, __LINE__);
 		return -ESPIPE;
+	}
+
+	if(fatal_signal_pending(current)) {
+		printk(KERN_ERR "%s:%s:%d\n"
+			"fatal signal pending - returning EINTR\n",
+						__FUNCTION__, __FILE__, __LINE__);
+		return -EINTR;
+	}
 
 	ret = spliced = 0;
 
@@ -626,15 +636,29 @@ ssize_t tcp_splice_read(struct socket *sock, loff_t *ppos,
 	timeo = sock_rcvtimeo(sk, sock->file->f_flags & O_NONBLOCK);
 	while (tss.len) {
 		ret = __tcp_splice_read(sk, &tss);
-		if (ret < 0)
+		if (ret < 0) {
+			printk(KERN_ERR "%s:%s:%d\n"
+					"returning err %d\n",
+					__FUNCTION__, __FILE__, __LINE__, ret);
 			break;
+		}
 		else if (!ret) {
-			if (spliced)
+			if (spliced >= len)
 				break;
+			if (flags & SPLICE_F_NONBLOCK) {
+				ret = -EAGAIN;
+				printk(KERN_ERR "%s:%s:%d\n"
+						"returning EAGAIN\n",
+						__FUNCTION__, __FILE__, __LINE__);
+				break;
+			}
 			if (sock_flag(sk, SOCK_DONE))
 				break;
 			if (sk->sk_err) {
 				ret = sock_error(sk);
+				printk(KERN_ERR "%s:%s:%d\n"
+						"returning err %d\n",
+						__FUNCTION__, __FILE__, __LINE__, ret);
 				break;
 			}
 			if (sk->sk_shutdown & RCV_SHUTDOWN)
@@ -644,19 +668,22 @@ ssize_t tcp_splice_read(struct socket *sock, loff_t *ppos,
 				 * This occurs when user tries to read
 				 * from never connected socket.
 				 */
-				if (!sock_flag(sk, SOCK_DONE))
+				if (!sock_flag(sk, SOCK_DONE)) {
+					printk(KERN_ERR "%s:%s:%d\n"
+							"returning ENOTCONN\n",
+							__FUNCTION__, __FILE__, __LINE__);
 					ret = -ENOTCONN;
+				}
 				break;
 			}
 			if (!timeo) {
 				ret = -EAGAIN;
+				printk(KERN_ERR "%s:%s:%d\n"
+						"returning EAGAIN\n",
+						__FUNCTION__, __FILE__, __LINE__);
 				break;
 			}
 			sk_wait_data(sk, &timeo);
-			if (signal_pending(current)) {
-				ret = sock_intr_errno(timeo);
-				break;
-			}
 			continue;
 		}
 		tss.len -= ret;
@@ -668,8 +695,7 @@ ssize_t tcp_splice_read(struct socket *sock, loff_t *ppos,
 		lock_sock(sk);
 
 		if (sk->sk_err || sk->sk_state == TCP_CLOSE ||
-		    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-		    signal_pending(current))
+		    (sk->sk_shutdown & RCV_SHUTDOWN))
 			break;
 	}
 
@@ -806,7 +832,7 @@ new_segment:
 		if (can_coalesce) {
 			skb_shinfo(skb)->frags[i - 1].size += copy;
 		} else {
-			get_page(page);
+			net_get_page(page);
 			skb_fill_page_desc(skb, i, page, offset, copy);
 		}
 
@@ -1015,7 +1041,7 @@ new_segment:
 					goto new_segment;
 				} else if (page) {
 					if (off == PAGE_SIZE) {
-						put_page(page);
+						net_put_page(page);
 						TCP_PAGE(sk) = page = NULL;
 						off = 0;
 					}
@@ -1056,9 +1082,9 @@ new_segment:
 				} else {
 					skb_fill_page_desc(skb, i, page, off, copy);
 					if (TCP_PAGE(sk)) {
-						get_page(page);
+						net_get_page(page);
 					} else if (off + copy < PAGE_SIZE) {
-						get_page(page);
+						net_get_page(page);
 						TCP_PAGE(sk) = page;
 					}
 				}

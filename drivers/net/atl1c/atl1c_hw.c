@@ -172,6 +172,56 @@ out:
 	return -1;
 }
 
+bool atl1c_write_eeprom(struct atl1c_hw *hw, u32 offset, u32 value, u32 value1)
+{
+	int i;
+	int ret = false;
+	u32 otp_ctrl_data;
+	u32 control;
+	u32 data;
+
+	if (offset & 3)
+		return ret; /* address do not align */
+  /* 
+  printk("%s(offset:0x%x value:0x%x,value1:0x%x hw_addr:0x%x)\n",
+    __FUNCTION__,offset,value,value1,hw->hw_addr);
+  */
+	AT_READ_REG(hw, REG_OTP_CTRL, &otp_ctrl_data);
+	if (!(otp_ctrl_data & OTP_CTRL_CLK_EN))
+		AT_WRITE_REG(hw, REG_OTP_CTRL,
+				(otp_ctrl_data | OTP_CTRL_CLK_EN));
+
+  /* write lo data */
+	AT_WRITE_REG(hw, REG_EEPROM_DATA_LO, ((swab32(value)<<16)|(swab32(value1)>>16)));
+  /* write high data and offset */
+	control = (offset & EEPROM_CTRL_ADDR_MASK) << EEPROM_CTRL_ADDR_SHIFT;
+  control |= (swab32(value)>>16);
+  control |= EEPROM_CTRL_RW;
+	AT_WRITE_REG(hw, REG_EEPROM_CTRL, control);
+
+	for (i = 0; i < 30; i++) {
+		udelay(2000);
+		AT_READ_REG(hw, REG_EEPROM_CTRL, &control);
+		if (!(control & EEPROM_CTRL_RW)){
+      //printk("%s_w(i:0x%x)\n",__FUNCTION__,i);
+			break;
+    }
+	}
+
+	if (!(otp_ctrl_data & OTP_CTRL_CLK_EN))
+		AT_WRITE_REG(hw, REG_OTP_CTRL, otp_ctrl_data);
+
+	udelay(2000);
+
+  /* verification */
+  if (   (atl1c_read_eeprom(hw, offset, &data)) 
+      && (value == data) ){ 
+    ret = true;
+  }
+
+	return ret;
+}
+
 bool atl1c_read_eeprom(struct atl1c_hw *hw, u32 offset, u32 *p_value)
 {
 	int i;
@@ -192,11 +242,13 @@ bool atl1c_read_eeprom(struct atl1c_hw *hw, u32 offset, u32 *p_value)
 	control = (offset & EEPROM_CTRL_ADDR_MASK) << EEPROM_CTRL_ADDR_SHIFT;
 	AT_WRITE_REG(hw, REG_EEPROM_CTRL, control);
 
-	for (i = 0; i < 10; i++) {
-		udelay(100);
+	for (i = 0; i < 30; i++) {
+		udelay(2000);
 		AT_READ_REG(hw, REG_EEPROM_CTRL, &control);
-		if (control & EEPROM_CTRL_RW)
+		if (control & EEPROM_CTRL_RW){
+      //printk("%s_r(i:0x%x)\n",__FUNCTION__,i);
 			break;
+    }
 	}
 	if (control & EEPROM_CTRL_RW) {
 		AT_READ_REG(hw, REG_EEPROM_CTRL, &data);

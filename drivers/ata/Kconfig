@@ -187,14 +187,41 @@ config ATA_PIIX
 
 	  If unsure, say N.
 
-config SATA_DWC
+menu	"DesignWare Cores SATA support" 
+config SATA_DWC   
 	tristate "DesignWare Cores SATA support"
-	depends on 460EX
+	depends on 460EX || APM82181
 	help
-	  This option enables support for the on-chip SATA controller of the
-	  AppliedMicro processor 460EX.
+		This option enables support for the Synopsys DesignWare Cores SATA
+		controller.
+		It can be found on the AMCC 460EX.
+		If unsure, say N.
 
-	  If unsure, say N.
+config SATA_DWC_PMP   
+	tristate "DesignWare Cores SATA with PMP support"
+	depends on 460EX || APM82181
+	default y
+	help
+		This option enables support for the Synopsys DesignWare Cores SATA
+		controller.
+		It can be found on the AMCC 460EX.
+		If unsure, say N.
+
+config SATA_DWC_NCQ   
+	tristate "DesignWare Cores SATA with PMP and NCQ support"
+	depends on 460EX || APM82181
+	help
+		help
+		This option enables support for the Synopsys DesignWare Cores SATA
+		controller.
+		It can be found on the AMCC 460EX.
+		If unsure, say N.
+
+config SATA_DWC_DEBUG
+	tristate "Enable debug output"
+	depends on SATA_DWC || SATA_DWC_PMP || SATA_DWC_NCQ
+
+endmenu
 
 config SATA_MV
 	tristate "Marvell SATA support"

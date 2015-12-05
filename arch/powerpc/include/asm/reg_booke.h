@@ -185,6 +185,8 @@
 #endif
 
 /* Bit definitions for CCR1. */
+#define CCR0_DTB	0x00008000 /* Disable trace broadcast */
+#define CCR0_GDCBT	0x00002000 /* Guarentee data cache block touch */
 #define	CCR1_DPC	0x00000100 /* Disable L1 I-Cache/D-Cache parity checking */
 #define	CCR1_TCS	0x00000080 /* Timer Clock Select */
 

@@ -12,6 +12,7 @@
 #ifndef _CRYPTO_ALGAPI_H
 #define _CRYPTO_ALGAPI_H
 
+#include <crypto/hash.h>
 #include <linux/crypto.h>
 #include <linux/list.h>
 #include <linux/kernel.h>

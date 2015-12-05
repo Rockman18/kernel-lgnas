@@ -208,12 +208,13 @@ static int atl1c_get_eeprom(struct net_device *netdev,
 	first_dword = eeprom->offset >> 2;
 	last_dword = (eeprom->offset + eeprom->len - 1) >> 2;
 
+  //printk("%s(offset:0x%x, len:0x%x)\n",__FUNCTION__,eeprom->offset,eeprom->len);
 	eeprom_buff = kmalloc(sizeof(u32) *
 			(last_dword - first_dword + 1), GFP_KERNEL);
 	if (eeprom_buff == NULL)
 		return -ENOMEM;
 
-	for (i = first_dword; i < last_dword; i++) {
+	for (i = first_dword; i <= last_dword; i++) {
 		if (!atl1c_read_eeprom(hw, i * 4, &(eeprom_buff[i-first_dword]))) {
 			kfree(eeprom_buff);
 			return -EIO;
@@ -225,7 +226,85 @@ static int atl1c_get_eeprom(struct net_device *netdev,
 	kfree(eeprom_buff);
 
 	return ret_val;
-	return 0;
+}
+
+static int atl1c_set_eeprom(struct net_device *netdev,
+			    struct ethtool_eeprom *eeprom, u8 *bytes)
+{
+	struct atl1c_adapter *adapter = netdev_priv(netdev);
+	struct atl1c_hw *hw = &adapter->hw;
+	u32 *eeprom_buff;
+	u32 *ptr;
+	int first_dword, last_dword;
+	int ret_val = 0;
+	int i;
+
+	if (eeprom->len == 0)
+		return -EOPNOTSUPP;
+
+  // printk("%s(length:0x%x)\n",__FUNCTION__,eeprom->len);
+  /* check magic 0x10631969 */
+	if (eeprom->magic != (adapter->pdev->vendor | 
+				(adapter->pdev->device << 16)))
+		return -EINVAL;
+
+	first_dword = eeprom->offset >> 2;
+	last_dword = (eeprom->offset + eeprom->len - 1) >> 2;
+	eeprom_buff = kmalloc(AT_EEPROM_LEN, GFP_KERNEL);
+	if (eeprom_buff == NULL)
+		return -ENOMEM;
+
+	ptr = (u32 *)eeprom_buff;
+
+	if (eeprom->offset & 3) {
+		/* need read/modify/write of first changed EEPROM word */
+		/* only the second byte of the word is being modified */
+#if 0
+		if (!atl1c_read_eeprom(hw, first_dword * 4, &(eeprom_buff[0]))) {
+			ret_val = -EIO;
+			goto out;
+		}
+#endif
+		ptr = (u32*)((u8 *)ptr + (eeprom->offset & 3));
+	}
+#if 0
+	if (((eeprom->offset + eeprom->len) & 3)) {
+		/* need read/modify/write of last changed EEPROM word */
+		/* only the first byte of the word is being modified */
+		if (!atl1c_read_eeprom(hw, last_dword * 4,
+				&(eeprom_buff[last_dword - first_dword]))) {
+			ret_val = -EIO;
+			goto out;
+		}
+	}
+#endif
+
+#if 1
+  /*
+   * atheros eeprom hw can write 6byte at one time, so 
+   * we have to prepare next dword
+   */
+	for (i = 0; i < last_dword - first_dword + 2; i++) {
+		if (!atl1c_read_eeprom(hw, (first_dword + i)* 4,&(eeprom_buff[i]))) {
+			ret_val = -EIO;
+			goto out;
+		}
+	}
+#endif
+
+	/* Device's eeprom is always little-endian, word addressable */
+	memcpy((u8 *)ptr, bytes, eeprom->len);
+
+	for (i = 0; i < last_dword - first_dword + 1; i++) {
+		if (!atl1c_write_eeprom(hw, ((first_dword + i) * 4),
+				  eeprom_buff[i],eeprom_buff[i+1])) {
+			ret_val = -EIO;
+			goto out;
+		}
+	}
+out:
+	kfree(eeprom_buff);
+	return ret_val;
 }
 
 static void atl1c_get_drvinfo(struct net_device *netdev,
@@ -298,7 +377,6 @@ static const struct ethtool_ops atl1c_ethtool_ops = {
 	.set_settings           = atl1c_set_settings,
 	.get_drvinfo            = atl1c_get_drvinfo,
 	.get_regs_len           = atl1c_get_regs_len,
-	.get_regs               = atl1c_get_regs,
 	.get_wol                = atl1c_get_wol,
 	.set_wol                = atl1c_set_wol,
 	.get_msglevel           = atl1c_get_msglevel,
@@ -307,6 +385,7 @@ static const struct ethtool_ops atl1c_ethtool_ops = {
 	.get_link               = ethtool_op_get_link,
 	.get_eeprom_len         = atl1c_get_eeprom_len,
 	.get_eeprom             = atl1c_get_eeprom,
+	.set_eeprom             = atl1c_set_eeprom,
 	.get_tx_csum            = atl1c_get_tx_csum,
 	.get_sg                 = ethtool_op_get_sg,
 	.set_sg                 = ethtool_op_set_sg,

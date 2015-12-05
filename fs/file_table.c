@@ -26,6 +26,9 @@
 #include <linux/ima.h>
 
 #include <asm/atomic.h>
+#ifdef S_MIRROR
+#include "s_mirror.h"
+#endif
 
 #include "internal.h"
 
@@ -104,7 +107,11 @@ int proc_nr_files(ctl_table *table, int write,
  */
 struct file *get_empty_filp(void)
 {
+#ifdef S_MIRROR
+	const struct cred *cred = sm_get_task()->cred;
+#else
 	const struct cred *cred = current_cred();
+#endif
 	static int old_max;
 	struct file * f;
 

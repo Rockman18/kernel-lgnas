@@ -586,3 +586,75 @@ int sr_is_xa(Scsi_CD *cd)
 #endif
 	return is_xa;
 }
+
+#if defined(CONFIG_MACH_NT1) || \
+    defined(CONFIG_MACH_NT11) || \
+    defined(CONFIG_MACH_NT3)
+
+/**************************************************/
+/* used to communicate with ODD at gadget  */
+/* NT1 ESK 2009.11.24                      */
+/**************************************************/
+extern Scsi_CD *gScsi_cd;
+int issue_cmd(struct packet_command *cgc)
+{
+	struct scsi_device *SDev;
+	int result = 0, err = 0;
+	struct request_sense *sense = cgc->sense;
+
+	SDev = gScsi_cd->device;
+
+	if (!sense) {
+		sense = kmalloc(SCSI_SENSE_BUFFERSIZE, GFP_KERNEL);
+		if (!sense) {
+			err = -ENOMEM;
+			goto out;
+		}
+	}
+
+
+	if (!scsi_block_when_processing_errors(SDev)) {
+		err = -ENODEV;
+		goto out;
+	}
+
+	result = scsi_execute(SDev, cgc->cmd, cgc->data_direction,
+			      cgc->buffer, cgc->buflen, (char *)sense,
+			      cgc->timeout, IOCTL_RETRIES, 0, NULL);
+
+/****
+	if(cgc->cmd[0] == 3){
+		printk("ESK : cmd=%x after\n", cgc->cmd[0]);
+		for(i=0; i<18; i++) {
+			if( ((unsigned char *)(cgc->buffer) + i) == NULL) break;
+			printk("%x[%x] ", i, *((unsigned char *)(cgc->buffer) + i));
+		}
+		printk("\n");
+	}
+****/
+
+	/* Wake up a process waiting for device */
+out:
+	if (!cgc->sense) {
+		if( sense ) kfree(sense);
+	}
+	else if (driver_byte(result) != 0) {
+		if(cgc->sense->sense_key == NOT_READY)
+			err = -ENOMEDIUM;
+		else	
+			err = -EIO;
+	}
+	
+	cgc->stat = err;
+
+/*	if (err == 0) {*/
+/*		printk("ESK : sr_do_ioctl OK\n");*/
+/*	} else {*/
+/*		printk("ESK : sr_do_ioctl NG\n");*/
+/*	}*/
+
+
+	return err;
+}
+EXPORT_SYMBOL(issue_cmd);
+#endif

@@ -21,6 +21,145 @@ config CONSTRUCTORS
 	depends on !UML
 	default y
 
+### Model settings
+config KERNEL_REVISION
+ int "Kernel revision for LG NAS"
+ default "1"
+ help
+   Kernel revision for LG NAS
+   This value is checked by sysctl kernel.revision
+
+config MACH_LGNAS
+	def_bool y
+
+config MACH_LGAMS
+	def_bool n
+
+config MACH_APM
+	def_bool n
+
+config LGNAS_HAS_CDROM
+	def_bool n
+
+config SELECTIVE_MIRROR
+  def_bool n
+
+config LGNAS_HAS_NO_MCU
+	def_bool n
+
+choice
+	prompt "LG Advanced Multimedia Storage"
+	default MACH_NC2
+
+config MACH_NS1
+	bool "NS1"
+	select LGNAS_HAS_CDROM
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NS1.
+
+config MACH_NC1
+	bool "NC1"
+	select MACH_LGAMS
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NC1.
+
+config MACH_NC2
+	bool "NC2"
+	select MACH_LGAMS
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NC2.
+
+config MACH_NC21
+	bool "NC2-1"
+	select MACH_LGAMS
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NC2-1.
+
+config MACH_NC3
+	bool "NC3"
+	select MACH_APM
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NC3.
+
+config MACH_NC5
+	bool "NC5"
+	select MACH_APM
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NC5.
+
+config MACH_NT1
+	bool "NT1"
+	select MACH_LGAMS
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NT1.
+
+config MACH_NT3
+	bool "NT3"
+	select MACH_APM
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NT3.
+
+config MACH_NT11
+	bool "NT11"
+	select MACH_LGAMS
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NT1-1.
+
+config MACH_NS2
+	bool "NS2"
+	select LGNAS_HAS_CDROM
+  select LGNAS_HAS_NO_MCU
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage NS2.
+
+config MACH_MM1
+	bool "MM1"
+	select LGNAS_HAS_CDROM
+	select SELECTIVE_MIRROR
+	---help---
+	  Select this if you want your kernel to support the
+	  LG Advanced Multimedia Storage MM1.
+
+endchoice
+
+config LGNAS_MODEL
+	string
+	default "ns1" if MACH_NS1
+	default "ns2" if MACH_NS2
+	default "nc1" if MACH_NC1
+	default "nc2" if MACH_NC2
+	default "nc2-1" if MACH_NC21
+	default "nc3" if MACH_NC3
+	default "nc5" if MACH_NC5
+	default "nt1" if MACH_NT1
+	default "nt1-1" if MACH_NT11
+	default "nt3" if MACH_NT3
+	default "mm1" if MACH_MM1
+
 menu "General setup"
 
 config EXPERIMENTAL
@@ -86,6 +225,7 @@ config CROSS_COMPILE
 
 config LOCALVERSION
 	string "Local version - append to kernel release"
+	default "-lgnas" if MACH_LGNAS
 	help
 	  Append an extra string to the end of your kernel version.
 	  This will show up when you type uname, for example.

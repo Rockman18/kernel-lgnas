@@ -35,6 +35,8 @@
 
 #include "ppc4xx_pci.h"
 
+int	pcie_used;
+
 static int dma_offset_set;
 
 #define U64_TO_U32_LOW(val)	((u32)((val) & 0x00000000ffffffffULL))
@@ -44,6 +46,175 @@ static int dma_offset_set;
 	((sizeof(resource_size_t) > sizeof(u32)) ? U64_TO_U32_LOW(val) : (val))
 #define RES_TO_U32_HIGH(val)	\
 	((sizeof(resource_size_t) > sizeof(u32)) ? U64_TO_U32_HIGH(val) : (0))
+
+#define	CPM_ER		0x0
+#define	CPM_FR		0x1
+#define	CPM_SR		0x2
+#define	CPM_PCIE_SLEEP	0x00040000
+#define	CPM_SATA0_SLEEP	0x00001000
+
+#if  defined (CONFIG_APM82181) && defined(CONFIG_PCIE_MAX_PAYLOAD_SIZE_256)
+static int __init get_pci_exp_ptr(struct pci_controller *hose, int bus, u8 *ptr, int *devfn)
+{
+	u8 cap_id;
+	u8 next;
+	int j;
+
+	u8 devfn_trace[256];
+	memset(devfn_trace, 0, 256);
+
+	for (j = 0; j<=0xff; j++){
+		if (early_read_config_byte(hose, bus, j, PCI_CAPABILITY_LIST, ptr) < 0) {
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Capabliity"
+				" List Register\n");
+			return -1;
+		}
+
+		if (*ptr != 0xff)
+			break;
+	}
+
+	if (*ptr == 0xff)
+		return 0;
+	else
+		*devfn = j;
+
+	while (*ptr){
+		if (early_read_config_byte(hose, bus, j, *ptr + PCI_CAP_LIST_ID, &cap_id) < 0) {
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read"
+			" Capability ID\n");
+			return -1;
+		}
+
+		if (early_read_config_byte(hose, bus, j, *ptr + PCI_CAP_LIST_NEXT, &next) < 0) {
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read"
+			" Capability List Next\n");
+			return -1;
+		}
+
+		if (devfn_trace[*ptr]++){
+			printk("<chain looped>\n");
+			return -1;
+		}
+		if (cap_id == 0xff){
+			printk("<chain broken>\n");
+			return -1;
+		}
+	/*
+	* We only interested in PCI Express capability
+	* which have payload size etc
+	*/
+		if (cap_id == PCI_CAP_ID_EXP)
+			return 0;
+		else{
+			*ptr = next;
+		}
+	}
+
+	return -1;
+}
+
+void ppc440_config_pcie_mps(struct pci_controller *hose)
+{
+	int i;
+	int devfn;
+	u32 mps;
+	u32 ecdevcppa;
+	u32 ecdevctl;
+	u32 mps_supported;
+	u8  ptr;
+	int adjust_mps=1;
+
+	/*
+	* Check supported max payload size for all devices
+	* If all devices on this hose supported mps > 256, then we will set the max payload
+	* size of the root complex and each device's mps to 256bytes
+	*/
+	for (i = hose->first_busno +1; i<=hose->last_busno; i++){
+		if (get_pci_exp_ptr(hose, i, &ptr, &devfn) < 0){
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Capabliity"
+				" List Register on bus:%d\n", i);
+			continue;
+		}
+
+		if (ptr == 0xff){
+			continue;
+		}
+
+		if (early_read_config_dword(hose, hose->first_busno, 0,  0x00, &ecdevctl)<0){
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+				" Control Register\n");
+			return;
+		}
+
+		if (early_read_config_dword(hose, i, devfn, ptr + PCI_EXP_DEVCAP, &mps_supported) < 0) {
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+			" Capability Register\n");
+			return;
+		}
+
+		if (early_read_config_dword(hose, i, devfn, ptr + PCI_EXP_DEVCTL, &mps) < 0) {
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+			" Capability Register\n");
+			return;
+		}
+		printk("Max pay load supported =0x%x max pay load prog 0x%x \n",mps_supported, mps);
+		if (!(mps_supported & PCI_EXP_DEVCAP_PAYLOAD)){
+			adjust_mps = 0;
+			break;
+		}
+	}
+
+	if (adjust_mps){
+	/* we already know all devices on this hose have supported mps > 128bytes
+	* we will set mps for each the devices at 256byte
+	*/
+
+		printk("hose->first_busno = %x, hose= %x\n",hose->first_busno, (u32)hose);
+
+		if (early_read_config_dword(hose, hose->first_busno, 0,  0x00, &ecdevctl)<0){
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+			" Control Register\n");
+			return;
+		}
+
+	/* Set supported MPS and MPS to 256byte for the root complex */
+		if (early_read_config_dword(hose, hose->first_busno, 0,  PECFG_ECDEVCTL, &ecdevctl)<0){
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+				" Control Register\n");
+			return;
+		}
+
+		early_write_config_dword(hose, hose->first_busno, 0, PECFG_ECDEVCTL, (ecdevctl & 0xffffff1f) | 0x00000020);
+		if (early_read_config_dword(hose, hose->first_busno, 0,  PECFG_ECDEVCAPPA, &ecdevcppa)<0){
+			printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+				" Capability Register\n");
+			return;
+		}
+
+		early_write_config_dword(hose, hose->first_busno, 0, PECFG_ECDEVCAPPA, (ecdevcppa & 0xfffffff8) | 0x00000001);
+
+		for (i = hose->first_busno +1; i<=hose->last_busno; i++){
+			if (get_pci_exp_ptr(hose, i, &ptr, &devfn) < 0){
+				printk(KERN_ERR "ppc440_init_pcie:couldn't read Capabliity"
+				" List Register on bus:%d \n", i);
+				return;
+		}
+
+		if (ptr != 0xff) {
+
+			if (early_read_config_dword(hose, i, devfn, ptr + PCI_EXP_DEVCTL, &mps) < 0) {
+				printk(KERN_ERR "ppc440_init_pcie:couldn't read Device"
+					" Capability Register\n");
+				return;
+			}
+
+			early_write_config_dword(hose, i, devfn, ptr + PCI_EXP_DEVCTL, (mps & 0xffffff1f) | 0x00000020);
+		}
+	}
+}
+}
+#endif
 
 static inline int ppc440spe_revA(void)
 {
@@ -868,6 +1039,9 @@ static struct ppc4xx_pciex_hwops ppc440speB_pcie_hwops __initdata =
 static int __init ppc460ex_pciex_core_init(struct device_node *np)
 {
 	/* Nothing to do, return 2 ports */
+#if defined(CONFIG_APM82181)
+	return 1;
+#endif
 	return 2;
 }
 
@@ -876,6 +1050,33 @@ static int ppc460ex_pciex_init_port_hw(struct ppc4xx_pciex_port *port)
 	u32 val;
 	u32 utlset1;
 
+	/*
+         * Do a software reset on PCIe ports.
+         * This code is to fix the issue that pci drivers doesn't re-assign
+         * bus number for PCIE devices after Uboot
+         * scanned and configured all the busses (eg. PCIE NIC IntelPro/1000
+         * PT quad port, SAS LSI 1064E)
+         */
+#ifdef CONFIG_ATHEROS_3X3_SUPPORT
+    if (!(mfdcri(SDR0, port->sdr_base + PESDRn_LOOP) & 0x00001000)){
+#endif
+        switch (port->index)
+        {
+        case 0:
+                mtdcri(SDR0, PESDR0_460EX_PHY_CTL_RST, 0x0);
+                mdelay(10);
+                break;
+        case 1:
+                mtdcri(SDR0, PESDR1_460EX_PHY_CTL_RST, 0x0);
+                mdelay(10);
+                break;
+        default:
+                break;
+        }
+#ifdef CONFIG_ATHEROS_3X3_SUPPORT
+	}
+#endif
+
 	if (port->endpoint)
 		val = PTYPE_LEGACY_ENDPOINT << 20;
 	else
@@ -883,7 +1084,15 @@ static int ppc460ex_pciex_init_port_hw(struct ppc4xx_pciex_port *port)
 
 	if (port->index == 0) {
 		val |= LNKW_X1 << 12;
+#if defined(CONFIG_APM82181)
+#if defined(CONFIG_PCIE_MAX_PAYLOAD_SIZE_256)
+		utlset1 = 0x10000000;
+#else
+		utlset1 = 0x00000000;
+#endif
+#else
 		utlset1 = 0x20000000;
+#endif
 	} else {
 		val |= LNKW_X4 << 12;
 		utlset1 = 0x20101101;
@@ -891,15 +1100,35 @@ static int ppc460ex_pciex_init_port_hw(struct ppc4xx_pciex_port *port)
 
 	mtdcri(SDR0, port->sdr_base + PESDRn_DLPSET, val);
 	mtdcri(SDR0, port->sdr_base + PESDRn_UTLSET1, utlset1);
+#if defined(CONFIG_APM82181)
+#if defined(CONFIG_PCIE_MAX_PAYLOAD_SIZE_256)
+	mtdcri(SDR0, port->sdr_base + PESDRn_UTLSET2, 0x01110000);
+#else
+	mtdcri(SDR0, port->sdr_base + PESDRn_UTLSET2, 0x01010000);
+#endif
+#else
 	mtdcri(SDR0, port->sdr_base + PESDRn_UTLSET2, 0x01210000);
+#endif
 
 	switch (port->index) {
 	case 0:
 		mtdcri(SDR0, PESDR0_460EX_L0CDRCTL, 0x00003230);
 		mtdcri(SDR0, PESDR0_460EX_L0DRV, 0x00000130);
 		mtdcri(SDR0, PESDR0_460EX_L0CLK, 0x00000006);
-
+        // If link is down, Reset PHY
+#ifdef CONFIG_ATHEROS_3X3_SUPPORT
+        if (!(mfdcri(SDR0, port->sdr_base + PESDRn_LOOP) & 0x00001000)){
+#endif
+#if defined(CONFIG_APM82181)
 		mtdcri(SDR0, PESDR0_460EX_PHY_CTL_RST,0x10000000);
+		mdelay(50);
+		mtdcri(SDR0, PESDR0_460EX_PHY_CTL_RST,0x30000000);
+#else
+            	mtdcri(SDR0, PESDR0_460EX_PHY_CTL_RST,0x10000000);
+#endif
+#ifdef CONFIG_ATHEROS_3X3_SUPPORT
+        }
+#endif
 		break;
 
 	case 1:
@@ -955,13 +1184,23 @@ static int ppc460ex_pciex_init_utl(struct ppc4xx_pciex_port *port)
 	 * Set buffer allocations and then assert VRB and TXE.
 	 */
 	out_be32(port->utl_base + PEUTL_PBCTL,	0x0800000c);
+#if  defined (CONFIG_APM82181) && defined(CONFIG_PCIE_MAX_PAYLOAD_SIZE_256)
+	out_be32(port->utl_base + PEUTL_OUTTR,  0x02000000);
+	out_be32(port->utl_base + PEUTL_INTR,   0x02000000);
+
+#else
 	out_be32(port->utl_base + PEUTL_OUTTR,	0x08000000);
 	out_be32(port->utl_base + PEUTL_INTR,	0x02000000);
+#endif
 	out_be32(port->utl_base + PEUTL_OPDBSZ,	0x04000000);
 	out_be32(port->utl_base + PEUTL_PBBSZ,	0x00000000);
 	out_be32(port->utl_base + PEUTL_IPHBSZ,	0x02000000);
 	out_be32(port->utl_base + PEUTL_IPDBSZ,	0x04000000);
 	out_be32(port->utl_base + PEUTL_RCIRQEN,0x00f00000);
+#if  defined (CONFIG_APM82181) && defined(CONFIG_PCIE_MAX_PAYLOAD_SIZE_256)
+	out_be32(port->utl_base + PEUTL_PCTL,   0x80841066);
+	udelay(100);
+#endif
 	out_be32(port->utl_base + PEUTL_PCTL,	0x80800066);
 
 	return 0;
@@ -1093,7 +1332,7 @@ static struct ppc4xx_pciex_hwops ppc460sx_pcie_hwops __initdata = {
 
 #endif /* CONFIG_44x */
 
-#ifdef CONFIG_40x
+#if defined(CONFIG_40x)
 
 static int __init ppc405ex_pciex_core_init(struct device_node *np)
 {
@@ -1209,7 +1448,7 @@ static int __init ppc4xx_pciex_check_core_init(struct device_node *np)
 	if (of_device_is_compatible(np, "ibm,plb-pciex-460sx"))
 		ppc4xx_pciex_hwops = &ppc460sx_pcie_hwops;
 #endif /* CONFIG_44x    */
-#ifdef CONFIG_40x
+#if defined(CONFIG_40x) 
 	if (of_device_is_compatible(np, "ibm,plb-pciex-405ex"))
 		ppc4xx_pciex_hwops = &ppc405ex_pcie_hwops;
 #endif
@@ -1577,7 +1816,6 @@ static int __init ppc4xx_setup_one_pciex_POM(struct ppc4xx_pciex_port	*port,
 		dcr_write(port->dcrs, DCRO_PEGPL_OMR3MSKL, sa | 3);
 		break;
 	}
-
 	return 0;
 }
 
@@ -1682,9 +1920,9 @@ static void __init ppc4xx_configure_pciex_PIMs(struct ppc4xx_pciex_port *port,
 		 * if it works
 		 */
 		out_le32(mbase + PECFG_PIM0LAL, 0x00000000);
-		out_le32(mbase + PECFG_PIM0LAH, 0x00000000);
+		out_le32(mbase + PECFG_PIM0LAH, 0x00000008); /* Moving on HB*/
 		out_le32(mbase + PECFG_PIM1LAL, 0x00000000);
-		out_le32(mbase + PECFG_PIM1LAH, 0x00000000);
+		out_le32(mbase + PECFG_PIM1LAH, 0x0000000c); /* Moving on HB */
 		out_le32(mbase + PECFG_PIM01SAH, 0xffff0000);
 		out_le32(mbase + PECFG_PIM01SAL, 0x00000000);
 
@@ -1839,17 +2077,32 @@ static void __init ppc4xx_pciex_port_setup_hose(struct ppc4xx_pciex_port *port)
 	if (!port->endpoint) {
 		/* Set Class Code to PCI-PCI bridge and Revision Id to 1 */
 		out_le32(mbase + 0x208, 0x06040001);
+#ifdef CONFIG_PCI_MSI
+                printk("Disabling INTX for MSI testing.\n");
+                out_be32((mbase + 0x23C), 0x00000000);
+                out_be32((mbase + 0x4),   0x07040000);
 
+                printk("Setting for 64-bit MSI and 4 MSI messages.\n");
+                out_be32((mbase + 0x048),in_be32((mbase + 0x048)) | 0x00a50000);
+
+#endif
 		printk(KERN_INFO "PCIE%d: successfully set as root-complex\n",
 		       port->index);
 	} else {
 		/* Set Class Code to Processor/PPC */
 		out_le32(mbase + 0x208, 0x0b200001);
+#ifdef CONFIG_PCI_MSI
+                 printk("Setting for 64-bit MSI and 4 MSI messages.\n");
+                 out_be32((mbase + 0x048),in_be32((mbase + 0x048)) | 0x00a50000);
+#endif
 
 		printk(KERN_INFO "PCIE%d: successfully set as endpoint\n",
 		       port->index);
 	}
-
+#if  defined (CONFIG_APM82181) && defined(CONFIG_PCIE_MAX_PAYLOAD_SIZE_256)
+	if(port->link)
+		ppc440_config_pcie_mps(hose);
+#endif
 	return;
  fail:
 	if (hose)
@@ -1893,8 +2146,11 @@ static void __init ppc4xx_probe_pciex_bridge(struct device_node *np)
 	/*
 	 * Check if device is enabled
 	 */
+
+        pcie_used = 1;
 	if (!of_device_is_available(np)) {
 		printk(KERN_INFO "PCIE%d: Port disabled via device-tree\n", port->index);
+                pcie_used = 0;
 		return;
 	}
 

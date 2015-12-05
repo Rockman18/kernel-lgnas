@@ -53,7 +53,7 @@ struct kmem_cache *blk_requestq_cachep;
  * Controlling structure to kblockd
  */
 static struct workqueue_struct *kblockd_workqueue;
-
+extern int lgnas_debug;
 static void drive_stat_acct(struct request *rq, int new_io)
 {
 	struct hd_struct *part;
@@ -62,6 +62,10 @@ static void drive_stat_acct(struct request *rq, int new_io)
 
 	if (!blk_do_io_stat(rq))
 		return;
+
+	if (lgnas_debug == 0x10) {
+	  printk("%s by %s\n", (rw==REQ_WRITE ? "write" : "read" ), current->comm );
+	}
 
 	cpu = part_stat_lock();
 	part = disk_map_sector_rcu(rq->rq_disk, blk_rq_pos(rq));

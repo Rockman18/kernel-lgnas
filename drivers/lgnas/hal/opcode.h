@@ -1,0 +1,90 @@
+#ifndef __OPCODE_H__
+#define __OPCODE_H__
+
+#define	MAIN_WAIT_MODE	0x02
+#define	IP_MODE		0x03
+#define IP_SELECT	0x04
+#define IP_DHCP		0x05
+#define IP_STATIC	0x06
+#define IP_IPKEY	0x7
+#define IP_MASKSET	0x08
+#define IP_MASKKEY	0x09
+#define IP_GWSET	0x0a
+#define	IP_GWKEY	0x0b
+#define	INFO_FAN	0x0c
+#define INFO_IP		0x0d
+#define INFO_USAGE	0x0e
+#define INFO_FWVER	0x0f
+#define INFO_MICOM	0x10
+#define INFO_TIME	0x11
+#define INFO_TEMP	0x12
+#define INFO_RAID	0x63
+#define USB_BACKUP	0x13
+#define USB_FULL	0x14
+#define	USB_INC		0x15
+#define	ODD_BACKUP	0x16
+#define	ODD_DATA	0x17
+#define	ODD_IMAGE	0x18
+#define FULL_DONE	0x19
+#define	INC_DONE	0x1a
+#define	DATA_DONE	0x1b
+#define	IMAGE_DONE	0x1c
+#define	INFO_FSTAB	0x1d
+#define IP_DONE		0x1e
+#define USB_ONETOUCH	0x1f
+#define ONETOUCH_DONE	0x20
+#define MESSAGE_MODE	0x21
+#define SYNC_MODE	0x22
+#define USB_SYNC	0x23
+#define USB_CANCEL	0x24
+#define ODD_CANCEL	0x25
+#define HIB_MODE	0x26
+#define HIB_DONE	0x27
+#define CANCEL_ODD	0x28
+#define CANCEL_IP	0x29
+#define IP_STATIC_MODE	0x2a
+#define IP_DHCP_MODE	0x2b
+#define INFORM_MODE	0x2c
+#define POWER_OFF	0x2d
+#define INFO_IPONLY	0x2e
+#define HIB_EXIT	0x2f
+#define USB_CANCEL_MODE	0x40
+#define USB_NOCANCEL	0x41
+#define ODD_CANCEL_MODE	0x42
+#define ODD_NOCANCEL	0x43
+#define BOTH_BACKUP		0x34
+#define EXT_HDD				0x35
+#define EXT_ODD				0x36
+#define ODD_EJECT			0x37
+
+#define NS2_KEY_ODD_BACKUP_ISO       0x50
+#define NS2_KEY_ODD_BACKUP_CANCEL    0x51
+#define NS2_KEY_ODD_BURN             0x52
+#define NS2_KEY_ODD_BURN_CANCEL      0x53
+#define NS2_KEY_USB_BACKUP           0x54
+#define NS2_KEY_USB_BACKUP_CANCEL    0x55
+#define NS2_KEY_DHCP                 0x56
+#define NS2_KEY_EJECT                0x57
+#define NS2_KEY_STATIC               0x58
+#define NS2_KEY_ODD_IMAGE_GET        0x5a
+#define NS2_KEY_ODD_BACKUP_DATA      0x5b
+
+#define NS2_INFO_IP                  0x60
+#define NS2_INFO_TIME                0x61
+#define NS2_INFO_CAPA                0x62
+#define NS2_INFO_SYNC                0x63
+#define NS2_INFO_SVCCODE             0x64
+#define NS2_INFO_PWDINIT             0x65
+#define NS2_INFO_RSV                 0x6F
+
+#define PRIO_LOWEST			0x0
+#define PRIO_DEFAULT		0x0
+#define PRIO_USBCANCEL	0x8
+#define PRIO_ODDCANCEL	0x8
+#define PRIO_SWITCH			0x8
+#define PRIO_HIBEXIT		0xf
+#define PRIO_EJECT			0xf
+#define PRIO_POWEROFF		0xf
+#define PRIO_HIGHEST		0xf
+
+#endif

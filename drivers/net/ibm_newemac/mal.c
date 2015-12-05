@@ -26,12 +26,26 @@
  */
 
 #include <linux/delay.h>
-#include <linux/slab.h>
 
 #include "core.h"
 #include <asm/dcr-regs.h>
+#include <asm/ppc4xx_ocm.h>
 
 static int mal_count;
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+static char *tx_coal_irqname[] = {
+	"TX0 COAL",
+	"TX1 COAL",
+	"TX2 COAL",
+	"TX3 COAL",
+};
+static char *rx_coal_irqname[] = {
+	"RX0 COAL",
+	"RX1 COAL",
+	"RX2 COAL",
+	"RX3 COAL",
+};
+#endif
 
 int __devinit mal_register_commac(struct mal_instance	*mal,
 				  struct mal_commac	*commac)
@@ -218,9 +232,176 @@ static inline void mal_disable_eob_irq(struct mal_instance *mal)
 	MAL_DBG2(mal, "disable_irq" NL);
 }
 
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+
+#if defined(CONFIG_460SX)
+/* Set Tx fram count */
+static inline void set_ic_txfthr(struct mal_instance *mal)
+{
+	int reg;
+	int val = mal->coales_param[0].tx_count;
+
+	reg = (val<<23) | (1<<22) ;
+	
+	SDR_WRITE(DCRN_SDR0_ICCRTX0, reg);	/* set counter */
+	SDR_WRITE(DCRN_SDR0_ICCRTX0,(val<<23));	/* enable counter */
+
+	SDR_WRITE(DCRN_SDR0_ICCRTX1, reg);        /* set counter */
+        SDR_WRITE(DCRN_SDR0_ICCRTX1,(val<<23));  /* enable counter */
+
+	SDR_WRITE(DCRN_SDR0_ICCRTX2, reg);        /* set counter */
+        SDR_WRITE(DCRN_SDR0_ICCRTX2,(val<<23));  /* enable counter */
+
+	SDR_WRITE(DCRN_SDR0_ICCRTX3, reg);        /* set counter */
+        SDR_WRITE(DCRN_SDR0_ICCRTX3,(val<<23));  /* enable counter */
+
+
+	mal->enet_coales_iccrtx = reg;
+}
+/* Set Rx fram count */
+static inline void set_ic_rxfthr(struct mal_instance *mal)
+{
+	int reg;
+	int val = mal->coales_param[0].rx_count;
+	
+	reg = (val<<23) | (1<<22) ;
+
+	SDR_WRITE(DCRN_SDR0_ICCRRX0,reg);	/* set counter */
+	SDR_WRITE(DCRN_SDR0_ICCRRX0,(val<<23));	/* enable counter */
+
+	SDR_WRITE(DCRN_SDR0_ICCRRX1,reg);        /* set counter */
+        SDR_WRITE(DCRN_SDR0_ICCRRX1,(val<<23));  /* enable counter */
+
+	SDR_WRITE(DCRN_SDR0_ICCRRX2,reg);        /* set counter */
+        SDR_WRITE(DCRN_SDR0_ICCRRX2,(val<<23));  /* enable counter */
+
+	SDR_WRITE(DCRN_SDR0_ICCRRX3,reg);        /* set counter */
+        SDR_WRITE(DCRN_SDR0_ICCRRX3,(val<<23));  /* enable counter */
+
+	mal->enet_coales_iccrrx = reg;
+}
+#endif
+
+inline void mal_enable_coal(struct mal_instance *mal)
+{
+	unsigned int val;
+#if defined(CONFIG_405EX)
+	/* Clear the counters */
+	val = SDR0_ICC_FLUSH0 | SDR0_ICC_FLUSH1;
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX, val);
+
+	/* Set Tx/Rx Timer values */
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX0, CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX1, CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX0, CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX1, CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER);
+
+	/* Enable the Tx/Rx Coalescing interrupt */
+	val = ((CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK)
+			<< SDR0_ICC_FTHR0_SHIFT) |
+		((CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK)
+			<< SDR0_ICC_FTHR1_SHIFT);
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX, val);
+
+	val = ((CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK)
+			<< SDR0_ICC_FTHR0_SHIFT) |
+		((CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK)
+			<< SDR0_ICC_FTHR1_SHIFT);
+
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX, val);
+#elif defined(CONFIG_APM82181)
+	/* Clear the counters */
+        val = SDR0_ICC_FLUSH;
+        mtdcri(SDR0, DCRN_SDR0_ICCRTX0, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX0, val);
+
+	/* Set Tx/Rx Timer values */
+        mtdcri(SDR0, DCRN_SDR0_ICCTRTX0,  mal->coales_param[0].tx_time);
+        mtdcri(SDR0, DCRN_SDR0_ICCTRRX0,  mal->coales_param[0].rx_time);
+
+	/* Enable the Tx/Rx Coalescing interrupt */	
+	val = (mal->coales_param[0].tx_count & COAL_FRAME_MASK)
+                        << SDR0_ICC_FTHR_SHIFT;
+        mtdcri(SDR0, DCRN_SDR0_ICCRTX0, val);
+        
+	val = (mal->coales_param[0].rx_count & COAL_FRAME_MASK)
+                        << SDR0_ICC_FTHR_SHIFT;
+        mtdcri(SDR0, DCRN_SDR0_ICCRRX0, val);
+
+#elif defined(CONFIG_460EX) || defined(CONFIG_460GT)
+	/* Clear the counters */
+	val = SDR0_ICC_FLUSH;
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX0, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX1, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX0, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX1, val);
+#if defined(CONFIG_460GT)
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX2, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX3, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX2, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX3, val);
+#endif
+
+	/* Set Tx/Rx Timer values */
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX0, CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX1, CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX0, CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX1, CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER);
+#if defined(CONFIG_460GT)
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX2, CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX3, CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX2, CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX3, CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER);
+#endif
+
+	/* Enable the Tx/Rx Coalescing interrupt */
+	val = (CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK)
+			<< SDR0_ICC_FTHR_SHIFT;
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX0, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX1, val);
+#if defined(CONFIG_460GT)
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX2, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRTX3, val);
+#endif
+
+	val = (CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK)
+			<< SDR0_ICC_FTHR_SHIFT;
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX0, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX1, val);
+#if defined(CONFIG_460GT)
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX2, val);
+	mtdcri(SDR0, DCRN_SDR0_ICCRRX3, val);
+#endif
+
+#elif defined(CONFIG_460SX)
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX0,  mal->coales_param[0].tx_time);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX1,  mal->coales_param[1].tx_time);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX2,  mal->coales_param[2].tx_time);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRTX3,  mal->coales_param[3].tx_time);
+
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX0,  mal->coales_param[0].rx_time);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX1,  mal->coales_param[1].rx_time);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX2,  mal->coales_param[2].rx_time);
+	mtdcri(SDR0, DCRN_SDR0_ICCTRRX3,  mal->coales_param[3].rx_time);
+
+	set_ic_rxfthr(mal);
+	set_ic_txfthr(mal);
+#endif
+	printk(KERN_INFO "MAL: Enabled Interrupt Coal TxCnt: %d RxCnt: %d\n",
+		mal->coales_param[0].tx_count,
+		mal->coales_param[0].rx_count);
+
+	printk(KERN_INFO "                            TxTimer: %d RxTimer: %d\n",
+		mal->coales_param[0].tx_time,
+		mal->coales_param[0].rx_time);
+}
+#endif
+
 static irqreturn_t mal_serr(int irq, void *dev_instance)
 {
 	struct mal_instance *mal = dev_instance;
+	struct list_head *l;
 
 	u32 esr = get_mal_dcrn(mal, MAL_ESR);
 
@@ -257,6 +438,14 @@ static irqreturn_t mal_serr(int irq, void *dev_instance)
 			       "mal%d: system error, OPB (ESR = 0x%08x)\n",
 			       mal->index, esr);
 	}
+
+
+	list_for_each(l, &mal->poll_list) {
+		struct mal_commac *mc =
+			list_entry(l, struct mal_commac, poll_list);
+		mc->ops->reset(mc->dev);
+	}
+
 	return IRQ_HANDLED;
 }
 
@@ -309,6 +498,15 @@ static irqreturn_t mal_rxeob(int irq, void *dev_instance)
 
 	return IRQ_HANDLED;
 }
+
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+static irqreturn_t mal_coal(int irq, void *dev_instance)
+{
+	struct mal_instance *mal = dev_instance;
+	mal_schedule_poll(mal);
+	return IRQ_HANDLED;
+}
+#endif
 
 static irqreturn_t mal_txde(int irq, void *dev_instance)
 {
@@ -394,6 +592,9 @@ void mal_poll_enable(struct mal_instance *mal, struct mal_commac *commac)
 
 static int mal_poll(struct napi_struct *napi, int budget)
 {
+#if defined(CONFIG_IBM_EMAC_MAL_QOS_V404)
+	int v;
+#endif
 	struct mal_instance *mal = container_of(napi, struct mal_instance, napi);
 	struct list_head *l;
 	int received = 0;
@@ -456,6 +657,32 @@ static int mal_poll(struct napi_struct *napi, int budget)
 		mc->ops->poll_tx(mc->dev);
 	}
 
+#if defined(CONFIG_IBM_EMAC_MAL_QOS_V404)
+	/* Process RX skbs QOS virtual channels.
+	 * 
+	 */
+	for ( v = 1; v < MAX_VCHANS; v++ ) {
+		list_for_each(l, &mal->poll_list) {
+			struct mal_commac *mc = 
+				list_entry(l, struct mal_commac, poll_list);
+			struct emac_instance *dev = mc->dev;
+			int n;
+			if ( v >= dev->rx_vchans ) {
+				continue;
+			}
+			n = mc->ops->poll_rx(dev->vdev[v],budget);			
+			if (n) {
+				received += n;
+				budget -= n;
+				if (budget <= 0) {				
+					goto more_work;
+				}
+			}
+		}
+	
+	}
+#endif
+
  more_work:
 	MAL_DBG2(mal, "poll() %d <- %d" NL, budget, received);
 	return received;
@@ -517,6 +744,7 @@ void *mal_dump_regs(struct mal_instance *mal, void *buf)
 	return regs + 1;
 }
 
+
 static int __devinit mal_probe(struct platform_device *ofdev,
 			       const struct of_device_id *match)
 {
@@ -525,9 +753,14 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 	int index = mal_count++;
 	unsigned int dcr_base;
 	const u32 *prop;
+	const char *str_prop;
 	u32 cfg;
 	unsigned long irqflags;
 	irq_handler_t hdlr_serr, hdlr_txde, hdlr_rxde;
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	int num_phys_chans;
+	int coal_intr_index;
+#endif
 
 	mal = kzalloc(sizeof(struct mal_instance), GFP_KERNEL);
 	if (!mal) {
@@ -541,6 +774,13 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 	mal->version = of_device_is_compatible(ofdev->dev.of_node, "ibm,mcmal2") ? 2 : 1;
 
 	MAL_DBG(mal, "probe" NL);
+
+	str_prop = of_get_property(ofdev->dev.of_node, "descriptor-memory", NULL);
+	if (str_prop && (!strcmp(str_prop,"ocm") || !strcmp(str_prop,"OCM"))) {
+		printk(KERN_INFO
+			"mal%d: descriptor-memory = %s\n", index, str_prop);
+		mal->desc_memory = MAL_DESC_MEM_OCM;
+	}
 
 	prop = of_get_property(ofdev->dev.of_node, "num-tx-chans", NULL);
 	if (prop == NULL) {
@@ -610,6 +850,46 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 		goto fail_unmap;
 	}
 
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	/* Number of Tx channels is equal to Physical channels */
+	/* Rx channels include Virtual channels so use Tx channels */
+	BUG_ON(mal->num_tx_chans > MAL_MAX_PHYS_CHANNELS);
+	num_phys_chans = mal->num_tx_chans;
+	/* Older revs in 460EX and 460GT have coalesce bug in h/w */
+#if defined(CONFIG_460EX) || defined(CONFIG_460GT)
+	{
+		unsigned int pvr;
+		unsigned short min;
+		pvr = mfspr(SPRN_PVR);
+		min = PVR_MIN(pvr);
+		if (min < 4) {
+			printk(KERN_INFO "PVR %x Intr Coal disabled: H/W bug\n",
+					pvr);
+			mal->coalesce_disabled = 1;
+		}
+	}
+#else
+	mal->coalesce_disabled = 0;
+#endif
+	coal_intr_index = 5;
+
+	/* If device tree doesn't Interrupt coal IRQ, fall back to EOB IRQ */
+	for (i = 0; (i < num_phys_chans) && (mal->coalesce_disabled == 0) ; i++) {
+		mal->txcoal_irq[i] = irq_of_parse_and_map(ofdev->dev.of_node, coal_intr_index++);
+		if (mal->txcoal_irq[i] == NO_IRQ) {
+			printk(KERN_INFO "MAL: No device tree IRQ for TxCoal%d  - disabling coalescing\n", i);
+			mal->coalesce_disabled = 1;
+		}
+	}
+	for (i = 0; (i < num_phys_chans) && (mal->coalesce_disabled == 0); i++) {
+		mal->rxcoal_irq[i] = irq_of_parse_and_map(ofdev->dev.of_node, coal_intr_index++);
+		if (mal->rxcoal_irq[i] == NO_IRQ) {
+			printk(KERN_INFO "MAL: No device tree IRQ for RxCoal%d  - disabling coalescing\n", i);
+			mal->coalesce_disabled = 1;
+		}
+	}
+#endif
+
 	INIT_LIST_HEAD(&mal->poll_list);
 	INIT_LIST_HEAD(&mal->list);
 	spin_lock_init(&mal->lock);
@@ -642,9 +922,25 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 	bd_size = sizeof(struct mal_descriptor) *
 		(NUM_TX_BUFF * mal->num_tx_chans +
 		 NUM_RX_BUFF * mal->num_rx_chans);
-	mal->bd_virt =
-		dma_alloc_coherent(&ofdev->dev, bd_size, &mal->bd_dma,
-				   GFP_KERNEL);
+
+	if (mal->desc_memory == MAL_DESC_MEM_OCM) {
+		mal->bd_virt = ocm_alloc(&mal->bd_phys, bd_size, 4,
+					OCM_NON_CACHED, "mal_descriptors");
+		mal->bd_dma  = (u32)mal->bd_phys;
+	}
+
+	if (mal->bd_virt == NULL) {
+		/* Allocate BD on SDRAM in case !MAL_DESC_MEM_OCM or failed OCM alloc */
+		if (mal->desc_memory == MAL_DESC_MEM_OCM){
+			printk(KERN_INFO
+				"mal%d: failed OCM alloc, descriptor-memory = SDRAM\n", index);
+			mal->desc_memory = MAL_DESC_MEM_SDRAM;
+		}
+		mal->bd_virt = dma_alloc_coherent(&ofdev->dev, bd_size,
+						&mal->bd_dma, GFP_KERNEL);
+	}
+
+
 	if (mal->bd_virt == NULL) {
 		printk(KERN_ERR
 		       "mal%d: out of memory allocating RX/TX descriptors!\n",
@@ -652,17 +948,25 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 		err = -ENOMEM;
 		goto fail_unmap;
 	}
-	memset(mal->bd_virt, 0, bd_size);
 
-	for (i = 0; i < mal->num_tx_chans; ++i)
+	memset(mal->bd_virt, 0, bd_size);
+	for (i = 0; i < mal->num_tx_chans; ++i) {
+		if (mal->desc_memory == MAL_DESC_MEM_OCM)
+			set_mal_dcrn(mal, MAL_TXBADDR, (mal->bd_phys >> 32));
+
 		set_mal_dcrn(mal, MAL_TXCTPR(i), mal->bd_dma +
 			     sizeof(struct mal_descriptor) *
 			     mal_tx_bd_offset(mal, i));
+	}
 
-	for (i = 0; i < mal->num_rx_chans; ++i)
+	for (i = 0; i < mal->num_rx_chans; ++i) {
+		if (mal->desc_memory == MAL_DESC_MEM_OCM)
+			set_mal_dcrn(mal, MAL_RXBADDR, (u32)(mal->bd_phys >> 32));
+
 		set_mal_dcrn(mal, MAL_RXCTPR(i), mal->bd_dma +
 			     sizeof(struct mal_descriptor) *
 			     mal_rx_bd_offset(mal, i));
+	}
 
 	if (mal_has_feature(mal, MAL_FTR_COMMON_ERR_INT)) {
 		irqflags = IRQF_SHARED;
@@ -675,20 +979,65 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 	}
 
 	err = request_irq(mal->serr_irq, hdlr_serr, irqflags, "MAL SERR", mal);
-	if (err)
-		goto fail2;
+	if (err) {
+		mal->serr_irq = NO_IRQ;
+		goto failirq;
+	}
 	err = request_irq(mal->txde_irq, hdlr_txde, irqflags, "MAL TX DE", mal);
-	if (err)
-		goto fail3;
-	err = request_irq(mal->txeob_irq, mal_txeob, 0, "MAL TX EOB", mal);
-	if (err)
-		goto fail4;
+	if (err) {
+		mal->txde_irq = NO_IRQ;
+		goto failirq;
+	}
 	err = request_irq(mal->rxde_irq, hdlr_rxde, irqflags, "MAL RX DE", mal);
-	if (err)
-		goto fail5;
-	err = request_irq(mal->rxeob_irq, mal_rxeob, 0, "MAL RX EOB", mal);
-	if (err)
-		goto fail6;
+	if (err) {
+		mal->rxde_irq = NO_IRQ;
+		goto failirq;
+	}
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	for (i = 0; (i < num_phys_chans) && (mal->coalesce_disabled == 0); i++) {
+		err = request_irq(mal->txcoal_irq[i],
+					mal_coal, 0, tx_coal_irqname[i], mal);
+		if (err) {
+			printk(KERN_INFO "MAL: TxCoal%d ReqIRQ failed - disabling coalescing\n", i);
+			mal->txcoal_irq[i] = NO_IRQ;
+			mal->coalesce_disabled = 1;
+			break;
+		}
+	}
+	for (i = 0; (i < num_phys_chans) && (mal->coalesce_disabled == 0); i++) {
+		err = request_irq(mal->rxcoal_irq[i],
+					mal_coal, 0, rx_coal_irqname[i], mal);
+		if (err) {
+			printk(KERN_INFO "MAL: RxCoal%d ReqIRQ failed - disabling coalescing\n", i);
+			mal->rxcoal_irq[i] = NO_IRQ;
+			mal->coalesce_disabled = 1;
+			break;
+		}
+	}
+
+	/* Fall back to EOB IRQ if coalesce not supported */
+	if (mal->coalesce_disabled) {
+		/* Clean up any IRQs allocated for Coalescing */
+		for (i = 0; i < num_phys_chans; i++) {
+			if (mal->txcoal_irq[i] != NO_IRQ)
+				free_irq(mal->txcoal_irq[i], mal);
+			if (mal->rxcoal_irq[i] != NO_IRQ)
+				free_irq(mal->rxcoal_irq[i], mal);
+		}
+#endif
+		err = request_irq(mal->txeob_irq, mal_txeob, 0, "MAL TX EOB", mal);
+		if (err) {
+			mal->txeob_irq = NO_IRQ;
+			goto failirq;
+		}
+		err = request_irq(mal->rxeob_irq, mal_rxeob, 0, "MAL RX EOB", mal);
+		if (err) {
+			mal->rxeob_irq = NO_IRQ;
+			goto failirq;
+		}
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	}
+#endif
 
 	/* Enable all MAL SERR interrupt sources */
 	if (mal->version == 2)
@@ -696,6 +1045,31 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 	else
 		set_mal_dcrn(mal, MAL_IER, MAL1_IER_EVENTS);
 
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	if (mal->coalesce_disabled == 0) {
+		mal->coales_param[0].tx_count = (CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK);
+		mal->coales_param[1].tx_count = (CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK);
+		mal->coales_param[2].tx_count = (CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK);
+		mal->coales_param[3].tx_count = (CONFIG_IBM_NEW_EMAC_TX_COAL_COUNT & COAL_FRAME_MASK);
+
+		mal->coales_param[0].rx_count = (CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK);
+		mal->coales_param[1].rx_count = (CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK);
+		mal->coales_param[2].rx_count = (CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK);
+		mal->coales_param[3].rx_count = (CONFIG_IBM_NEW_EMAC_RX_COAL_COUNT & COAL_FRAME_MASK);
+
+		mal->coales_param[0].tx_time = CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER;
+		mal->coales_param[1].tx_time = CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER;
+		mal->coales_param[2].tx_time = CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER;
+		mal->coales_param[3].tx_time = CONFIG_IBM_NEW_EMAC_TX_COAL_TIMER;
+
+		mal->coales_param[0].rx_time = CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER;
+		mal->coales_param[1].rx_time = CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER;
+		mal->coales_param[2].rx_time = CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER;
+		mal->coales_param[3].rx_time = CONFIG_IBM_NEW_EMAC_RX_COAL_TIMER;
+
+		mal_enable_coal(mal);
+}
+#endif
 	/* Enable EOB interrupt */
 	mal_enable_eob_irq(mal);
 
@@ -712,16 +1086,35 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 
 	return 0;
 
- fail6:
-	free_irq(mal->rxde_irq, mal);
- fail5:
-	free_irq(mal->txeob_irq, mal);
- fail4:
-	free_irq(mal->txde_irq, mal);
- fail3:
-	free_irq(mal->serr_irq, mal);
- fail2:
-	dma_free_coherent(&ofdev->dev, bd_size, mal->bd_virt, mal->bd_dma);
+ failirq:
+	if (mal->serr_irq != NO_IRQ)
+		free_irq(mal->serr_irq, mal);
+	if (mal->txde_irq != NO_IRQ)
+		free_irq(mal->txde_irq, mal);
+	if (mal->rxde_irq != NO_IRQ)
+		free_irq(mal->rxde_irq, mal);
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	if (mal->coalesce_disabled == 0) {
+		for (i = 0; i < num_phys_chans; i++) {
+			if (mal->txcoal_irq[i] != NO_IRQ)
+				free_irq(mal->txcoal_irq[i], mal);
+			if (mal->rxcoal_irq[i] != NO_IRQ)
+				free_irq(mal->rxcoal_irq[i], mal);
+		}
+	} else {
+#endif
+		if (mal->txeob_irq != NO_IRQ)
+			free_irq(mal->txeob_irq, mal);
+		if (mal->rxeob_irq != NO_IRQ)
+			free_irq(mal->rxeob_irq, mal);
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	}
+#endif
+	if (mal->desc_memory == MAL_DESC_MEM_OCM)
+		ocm_free(mal->bd_virt);
+	else
+		dma_free_coherent(&ofdev->dev, bd_size,
+				mal->bd_virt, mal->bd_dma);
  fail_unmap:
 	dcr_unmap(mal->dcr_host, 0x100);
  fail:
@@ -733,6 +1126,10 @@ static int __devinit mal_probe(struct platform_device *ofdev,
 static int __devexit mal_remove(struct platform_device *ofdev)
 {
 	struct mal_instance *mal = dev_get_drvdata(&ofdev->dev);
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	int	i;
+	int	num_phys_chans;
+#endif
 
 	MAL_DBG(mal, "remove" NL);
 
@@ -749,17 +1146,38 @@ static int __devexit mal_remove(struct platform_device *ofdev)
 
 	dev_set_drvdata(&ofdev->dev, NULL);
 
-	free_irq(mal->serr_irq, mal);
-	free_irq(mal->txde_irq, mal);
-	free_irq(mal->txeob_irq, mal);
-	free_irq(mal->rxde_irq, mal);
-	free_irq(mal->rxeob_irq, mal);
-
+	if (mal->serr_irq != NO_IRQ)
+		free_irq(mal->serr_irq, mal);
+	if (mal->txde_irq != NO_IRQ)
+		free_irq(mal->txde_irq, mal);
+	if (mal->rxde_irq != NO_IRQ)
+		free_irq(mal->rxde_irq, mal);
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	num_phys_chans = mal->num_tx_chans;
+	if (mal->coalesce_disabled == 0) {
+		for (i = 0; i < num_phys_chans; i++) {
+			if (mal->txcoal_irq[i] != NO_IRQ)
+				free_irq(mal->txcoal_irq[i], mal);
+			if (mal->rxcoal_irq[i] != NO_IRQ)
+				free_irq(mal->rxcoal_irq[i], mal);
+		}
+	} else {
+#endif
+		if (mal->txeob_irq != NO_IRQ)
+			free_irq(mal->txeob_irq, mal);
+		if (mal->rxeob_irq != NO_IRQ)
+			free_irq(mal->rxeob_irq, mal);
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	}
+#endif
 	mal_reset(mal);
 
 	mal_dbg_unregister(mal);
 
-	dma_free_coherent(&ofdev->dev,
+	if (mal->desc_memory == MAL_DESC_MEM_OCM)
+		ocm_free(mal->bd_virt);
+	else
+		dma_free_coherent(&ofdev->dev,
 			  sizeof(struct mal_descriptor) *
 			  (NUM_TX_BUFF * mal->num_tx_chans +
 			   NUM_RX_BUFF * mal->num_rx_chans), mal->bd_virt,
@@ -792,7 +1210,6 @@ static struct of_device_id mal_platform_match[] =
 static struct of_platform_driver mal_of_driver = {
 	.driver = {
 		.name = "mcmal",
-		.owner = THIS_MODULE,
 		.of_match_table = mal_platform_match,
 	},
 	.probe = mal_probe,

@@ -349,7 +349,18 @@ static int lo_send(struct loop_device *lo, struct bio *bio, loff_t pos)
 	struct page *page = NULL;
 	int i, ret = 0;
 
+#if defined (CONFIG_MACH_NT3)
+	do_lo_send = do_lo_send_direct_write;
+	if (lo->transfer != transfer_none) {
+		page = alloc_page(GFP_NOIO | __GFP_HIGHMEM);
+		if (unlikely(!page))
+			goto fail;
+		kmap(page);
+		do_lo_send = do_lo_send_write;
+	}
+#else
 	do_lo_send = do_lo_send_aops;
+#endif
 	if (!(lo->lo_flags & LO_FLAGS_USE_AOPS)) {
 		do_lo_send = do_lo_send_direct_write;
 		if (lo->transfer != transfer_none) {

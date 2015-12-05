@@ -57,12 +57,11 @@ void tah_reset(struct platform_device *ofdev)
 		--n;
 
 	if (unlikely(!n))
-		printk(KERN_ERR "%s: reset timeout\n",
-			ofdev->dev.of_node->full_name);
+		printk(KERN_ERR "%s: reset timeout\n", ofdev->dev.of_node->full_name);
 
 	/* 10KB TAH TX FIFO accomodates the max MTU of 9000 */
 	out_be32(&p->mr,
-		 TAH_MR_CVR | TAH_MR_ST_768 | TAH_MR_TFS_10KB | TAH_MR_DTFP |
+		 TAH_MR_CVR | TAH_MR_ST_256 | TAH_MR_TFS_10KB | TAH_MR_DTFP |
 		 TAH_MR_DIG);
 }
 
@@ -83,7 +82,7 @@ void *tah_dump_regs(struct platform_device *ofdev, void *buf)
 			 * zmii ? if yes, then we'll add a cell_index
 			 * like we do for emac
 			 */
-	memcpy_fromio(regs, dev->base, sizeof(struct tah_regs));
+	memcpy(regs, dev->base, sizeof(struct tah_regs));
 	return regs + 1;
 }
 
@@ -168,7 +167,6 @@ static struct of_device_id tah_match[] =
 static struct of_platform_driver tah_driver = {
 	.driver = {
 		.name = "emac-tah",
-		.owner = THIS_MODULE,
 		.of_match_table = tah_match,
 	},
 	.probe = tah_probe,

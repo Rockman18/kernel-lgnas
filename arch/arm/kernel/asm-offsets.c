@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
+#include <linux/suspend.h>
 #include <asm/mach/arch.h>
 #include <asm/thread_info.h>
 #include <asm/memory.h>
@@ -120,5 +121,8 @@ int main(void)
   DEFINE(DMA_BIDIRECTIONAL,	DMA_BIDIRECTIONAL);
   DEFINE(DMA_TO_DEVICE,		DMA_TO_DEVICE);
   DEFINE(DMA_FROM_DEVICE,	DMA_FROM_DEVICE);
+  DEFINE(PBE_ADDRESS, offsetof(struct pbe, address));
+  DEFINE(PBE_ORIG_ADDRESS, offsetof(struct pbe, orig_address));
+  DEFINE(PBE_NEXT, offsetof(struct pbe, next));
   return 0; 
 }

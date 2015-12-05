@@ -457,7 +457,7 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 	}
 	return dev;
 }
-
+EXPORT_SYMBOL_GPL(usb_alloc_dev);
 /**
  * usb_get_dev - increments the reference count of the usb device structure
  * @dev: the device being referenced

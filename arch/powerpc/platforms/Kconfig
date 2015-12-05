@@ -337,4 +337,20 @@ config XILINX_PCI
 	bool "Xilinx PCI host bridge support"
 	depends on PCI && XILINX_VIRTEX
 
+config PPC4xx_PLATFORM_OPTIONS
+	bool "PPC4xx Platform Options"
+
+if PPC4xx_PLATFORM_OPTIONS
+
+config PPC4xx_HAVEN_DMA
+	bool "PPC4xx HAVEN DMA Controller support"
+	depends on 4xx
+
+config PPC4xx_HAVEN_EDMA
+        bool
+        depends on !STB03xxx && PPC4xx_HAVEN_DMA
+        default y
+
+endif
+
 endmenu

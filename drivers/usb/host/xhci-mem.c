@@ -89,16 +89,16 @@ static void xhci_link_segments(struct xhci_hcd *xhci, struct xhci_segment *prev,
 		return;
 	prev->next = next;
 	if (link_trbs) {
-		prev->trbs[TRBS_PER_SEGMENT-1].link.segment_ptr = next->dma;
+		prev->trbs[TRBS_PER_SEGMENT-1].link.segment_ptr = SWAP64(next->dma);
 
 		/* Set the last TRB in the segment to have a TRB type ID of Link TRB */
-		val = prev->trbs[TRBS_PER_SEGMENT-1].link.control;
+		val = SWAP32(prev->trbs[TRBS_PER_SEGMENT-1].link.control);
 		val &= ~TRB_TYPE_BITMASK;
 		val |= TRB_TYPE(TRB_LINK);
 		/* Always set the chain bit with 0.95 hardware */
 		if (xhci_link_trb_quirk(xhci))
 			val |= TRB_CHAIN;
-		prev->trbs[TRBS_PER_SEGMENT-1].link.control = val;
+		prev->trbs[TRBS_PER_SEGMENT-1].link.control = SWAP32(val);
 	}
 	xhci_dbg(xhci, "Linking segment 0x%llx to segment 0x%llx (DMA)\n",
 			(unsigned long long)prev->dma,
@@ -186,7 +186,7 @@ static struct xhci_ring *xhci_ring_alloc(struct xhci_hcd *xhci,
 
 	if (link_trbs) {
 		/* See section 4.9.2.1 and 6.4.4.1 */
-		prev->trbs[TRBS_PER_SEGMENT-1].link.control |= (LINK_TOGGLE);
+		prev->trbs[TRBS_PER_SEGMENT-1].link.control |= SWAP32(LINK_TOGGLE);
 		xhci_dbg(xhci, "Wrote link toggle flag to"
 				" segment %p (virtual), 0x%llx (DMA)\n",
 				prev, (unsigned long long)prev->dma);
@@ -281,6 +281,18 @@ struct xhci_input_control_ctx *xhci_get_input_control_ctx(struct xhci_hcd *xhci,
 	return (struct xhci_input_control_ctx *)ctx->bytes;
 }
 
+void swap_input_control_ctx(struct xhci_input_control_ctx *ctx)
+{
+    ctx->add_flags = SWAP32(ctx->add_flags);
+    ctx->drop_flags = SWAP32(ctx->drop_flags);
+    ctx->rsvd2[0] = SWAP32(ctx->rsvd2[0]);
+    ctx->rsvd2[1] = SWAP32(ctx->rsvd2[1]);
+    ctx->rsvd2[2] = SWAP32(ctx->rsvd2[2]);
+    ctx->rsvd2[3] = SWAP32(ctx->rsvd2[3]);
+    ctx->rsvd2[4] = SWAP32(ctx->rsvd2[4]);
+    ctx->rsvd2[5] = SWAP32(ctx->rsvd2[5]);
+}
+
 struct xhci_slot_ctx *xhci_get_slot_ctx(struct xhci_hcd *xhci,
 					struct xhci_container_ctx *ctx)
 {
@@ -289,6 +301,48 @@ struct xhci_slot_ctx *xhci_get_slot_ctx(struct xhci_hcd *xhci,
 
 	return (struct xhci_slot_ctx *)
 		(ctx->bytes + CTX_SIZE(xhci->hcc_params));
+}
+
+void swap_slot_ctx(struct xhci_slot_ctx *ctx)
+{
+    ctx->dev_info = SWAP32(ctx->dev_info);
+    ctx->dev_info2 = SWAP32(ctx->dev_info2);
+    ctx->dev_state = SWAP32(ctx->dev_state);
+    ctx->tt_info = SWAP32(ctx->tt_info);
+    ctx->reserved[0] = SWAP32(ctx->reserved[0]);
+    ctx->reserved[1] = SWAP32(ctx->reserved[1]);
+    ctx->reserved[2] = SWAP32(ctx->reserved[2]);
+    ctx->reserved[3] = SWAP32(ctx->reserved[3]);
+}
+
+void swap_container_ctx(struct xhci_hcd *xhci,
+                   struct xhci_container_ctx *ctx)
+{
+    struct xhci_ep_ctx  *ep_ctx;
+    struct xhci_slot_ctx *slot_ctx;
+    struct xhci_input_control_ctx *ctrl_ctx;
+    int num_eps;
+    if (ctx->type == XHCI_CTX_TYPE_INPUT) {
+        ctrl_ctx = xhci_get_input_control_ctx(xhci, ctx);
+        swap_input_control_ctx(ctrl_ctx);
+    }
+    slot_ctx = xhci_get_slot_ctx(xhci, ctx);
+    swap_slot_ctx(slot_ctx);
+    if (ctx->type == XHCI_CTX_TYPE_INPUT)
+        num_eps = (ctx->size - 2 * (CTX_SIZE(xhci->hcc_params)))
+                    / (CTX_SIZE(xhci->hcc_params));
+    else
+        num_eps = (ctx->size - 1 * (CTX_SIZE(xhci->hcc_params)))
+                            / (CTX_SIZE(xhci->hcc_params));
+    while (num_eps-- > 0) {
+        if (ctx->type == XHCI_CTX_TYPE_INPUT)
+            ep_ctx = (struct xhci_ep_ctx *)
+                (ctx->bytes + ((2 + num_eps) * CTX_SIZE(xhci->hcc_params)));
+        else
+            ep_ctx = (struct xhci_ep_ctx *)
+                (ctx->bytes + ((1 + num_eps) * CTX_SIZE(xhci->hcc_params)));
+        swap_ep_ctx(ep_ctx);
+    }
 }
 
 struct xhci_ep_ctx *xhci_get_ep_ctx(struct xhci_hcd *xhci,
@@ -302,6 +356,17 @@ struct xhci_ep_ctx *xhci_get_ep_ctx(struct xhci_hcd *xhci,
 
 	return (struct xhci_ep_ctx *)
 		(ctx->bytes + (ep_index * CTX_SIZE(xhci->hcc_params)));
+}
+
+void swap_ep_ctx(struct xhci_ep_ctx *ctx)
+{
+    ctx->deq = SWAP64(ctx->deq);
+    ctx->ep_info = SWAP32(ctx->ep_info);
+    ctx->ep_info2 = SWAP32(ctx->ep_info2);
+    ctx->tx_info = SWAP32(ctx->tx_info);
+    ctx->reserved[0] = SWAP32(ctx->reserved[0]);
+    ctx->reserved[1] = SWAP32(ctx->reserved[1]);
+    ctx->reserved[2] = SWAP32(ctx->reserved[2]);
 }
 
 
@@ -548,7 +613,7 @@ struct xhci_stream_info *xhci_alloc_stream_info(struct xhci_hcd *xhci,
 		addr = cur_ring->first_seg->dma |
 			SCT_FOR_CTX(SCT_PRI_TR) |
 			cur_ring->cycle_state;
-		stream_info->stream_ctx_array[cur_stream].stream_ring = addr;
+		stream_info->stream_ctx_array[cur_stream].stream_ring = SWAP64(addr);
 		xhci_dbg(xhci, "Setting stream %d ring ptr to 0x%08llx\n",
 				cur_stream, (unsigned long long) addr);
 
@@ -780,7 +845,7 @@ int xhci_alloc_virt_device(struct xhci_hcd *xhci, int slot_id,
 	INIT_LIST_HEAD(&dev->cmd_list);
 
 	/* Point to output device context in dcbaa. */
-	xhci->dcbaa->dev_context_ptrs[slot_id] = dev->out_ctx->dma;
+	xhci->dcbaa->dev_context_ptrs[slot_id] = SWAP64(dev->out_ctx->dma);
 	xhci_dbg(xhci, "Set slot id %d dcbaa entry %p to 0x%llx\n",
 			slot_id,
 			&xhci->dcbaa->dev_context_ptrs[slot_id],
@@ -1041,10 +1106,10 @@ static inline u32 xhci_get_max_esit_payload(struct xhci_hcd *xhci,
 		return 0;
 
 	if (udev->speed == USB_SPEED_SUPER)
-		return ep->ss_ep_comp.wBytesPerInterval;
+		return SWAP16(ep->ss_ep_comp.wBytesPerInterval);
 
-	max_packet = GET_MAX_PACKET(ep->desc.wMaxPacketSize);
-	max_burst = (ep->desc.wMaxPacketSize & 0x1800) >> 11;
+	max_packet = GET_MAX_PACKET(SWAP16(ep->desc.wMaxPacketSize));
+	max_burst = (SWAP16(ep->desc.wMaxPacketSize) & 0x1800) >> 11;
 	/* A 0 in max burst means 1 transfer per ESIT */
 	return max_packet * (max_burst + 1);
 }
@@ -1113,7 +1178,7 @@ int xhci_endpoint_init(struct xhci_hcd *xhci,
 	/* Set the max packet size and max burst */
 	switch (udev->speed) {
 	case USB_SPEED_SUPER:
-		max_packet = ep->desc.wMaxPacketSize;
+		max_packet = SWAP16(ep->desc.wMaxPacketSize);
 		ep_ctx->ep_info2 |= MAX_PACKET(max_packet);
 		/* dig out max burst from ep companion desc */
 		max_packet = ep->ss_ep_comp.bMaxBurst;
@@ -1127,13 +1192,13 @@ int xhci_endpoint_init(struct xhci_hcd *xhci,
 		 */
 		if (usb_endpoint_xfer_isoc(&ep->desc) ||
 				usb_endpoint_xfer_int(&ep->desc)) {
-			max_burst = (ep->desc.wMaxPacketSize & 0x1800) >> 11;
+			max_burst = (SWAP16(ep->desc.wMaxPacketSize) & 0x1800) >> 11;
 			ep_ctx->ep_info2 |= MAX_BURST(max_burst);
 		}
 		/* Fall through */
 	case USB_SPEED_FULL:
 	case USB_SPEED_LOW:
-		max_packet = GET_MAX_PACKET(ep->desc.wMaxPacketSize);
+		max_packet = GET_MAX_PACKET(SWAP16(ep->desc.wMaxPacketSize));
 		ep_ctx->ep_info2 |= MAX_PACKET(max_packet);
 		break;
 	default:
@@ -1257,7 +1322,7 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 	if (!xhci->scratchpad->sp_dma_buffers)
 		goto fail_sp4;
 
-	xhci->dcbaa->dev_context_ptrs[0] = xhci->scratchpad->sp_dma;
+	xhci->dcbaa->dev_context_ptrs[0] = SWAP64(xhci->scratchpad->sp_dma);
 	for (i = 0; i < num_sp; i++) {
 		dma_addr_t dma;
 		void *buf = pci_alloc_consistent(to_pci_dev(dev),
@@ -1265,7 +1330,7 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 		if (!buf)
 			goto fail_sp5;
 
-		xhci->scratchpad->sp_array[i] = dma;
+		xhci->scratchpad->sp_array[i] = SWAP64(dma);
 		xhci->scratchpad->sp_buffers[i] = buf;
 		xhci->scratchpad->sp_dma_buffers[i] = dma;
 	}
@@ -1927,8 +1992,8 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	/* set ring base address and size for each segment table entry */
 	for (val = 0, seg = xhci->event_ring->first_seg; val < ERST_NUM_SEGS; val++) {
 		struct xhci_erst_entry *entry = &xhci->erst.entries[val];
-		entry->seg_addr = seg->dma;
-		entry->seg_size = TRBS_PER_SEGMENT;
+		entry->seg_addr = SWAP64(seg->dma);
+		entry->seg_size = SWAP32(TRBS_PER_SEGMENT);
 		entry->rsvd = 0;
 		seg = seg->next;
 	}

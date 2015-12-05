@@ -167,6 +167,8 @@ MODULE_DESCRIPTION("Library module for ATA devices");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 
+void (*ata_power_set)(unsigned int port_no,
+	int pmp, unsigned char cmnd, int force, int power);
 
 static bool ata_sstatus_online(u32 sstatus)
 {
@@ -4049,6 +4051,20 @@ int ata_dev_reread_id(struct ata_device *dev, unsigned int readid_flags)
 		return -ENODEV;
 
 	memcpy(dev->id, id, sizeof(id[0]) * ATA_ID_WORDS);
+	{
+        char buf[40];
+		extern int ssc_check();
+#if defined (CONFIG_MACH_NT1) || defined (CONFIG_MACH_NT11) || defined (CONFIG_MACH_NC21)
+		extern void sata_ssc_enable();
+#endif
+
+		ata_id_string(dev->id, buf, ATA_ID_PROD, ATA_ID_PROD_LEN);
+		ssc_check(NULL,dev,buf,(dev->id)[137]);
+#if defined (CONFIG_MACH_NT1) || defined (CONFIG_MACH_NT11) || defined (CONFIG_MACH_NC21)
+		sata_ssc_enable( dev->link->ap );
+#endif
+
+	}
 	return 0;
 }
 
@@ -4673,6 +4689,7 @@ void ata_sg_clean(struct ata_queued_cmd *qc)
  */
 int atapi_check_dma(struct ata_queued_cmd *qc)
 {
+#if !defined(CONFIG_MACH_NT1) && !defined(CONFIG_MACH_NT11)
 	struct ata_port *ap = qc->ap;
 
 	/* Don't allow DMA if it isn't multiple of 16 bytes.  Quite a
@@ -4684,7 +4701,7 @@ int atapi_check_dma(struct ata_queued_cmd *qc)
 
 	if (ap->ops->check_atapi_dma)
 		return ap->ops->check_atapi_dma(qc);
-
+#endif
 	return 0;
 }
 
@@ -5006,6 +5023,14 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 			ata_port_schedule_eh(ap);
 			break;
 
+		case ATA_CMD_STANDBY:
+		case ATA_CMD_STANDBYNOW1:
+			if(ata_power_set && dev->class == ATA_DEV_ATA) {
+				ata_power_set(ap->port_no,dev->link->pmp,qc->scsicmd->cmnd[0],0,0);
+				dev->flags |= (1 << 14);
+			}
+			break;
+
 		case ATA_CMD_SLEEP:
 			dev->flags |= ATA_DFLAG_SLEEPING;
 			break;
@@ -5123,6 +5148,12 @@ void ata_qc_issue(struct ata_queued_cmd *qc)
 				 (ap->flags & ATA_FLAG_PIO_DMA)))
 		if (ata_sg_setup(qc))
 			goto sys_err;
+
+	if(unlikely(qc->dev->flags & (1 << 14))) {
+		qc->dev->flags &= ~(1 << 14);
+		if(ata_power_set)
+			ata_power_set(ap->port_no,link->pmp,0,0,1);
+	}
 
 	/* if device is sleeping, schedule reset and abort the link */
 	if (unlikely(qc->dev->flags & ATA_DFLAG_SLEEPING)) {

@@ -649,8 +649,8 @@ static int xhci_check_maxpacket(struct xhci_hcd *xhci, unsigned int slot_id,
 
 	out_ctx = xhci->devs[slot_id]->out_ctx;
 	ep_ctx = xhci_get_ep_ctx(xhci, out_ctx, ep_index);
-	hw_max_packet_size = MAX_PACKET_DECODED(ep_ctx->ep_info2);
-	max_packet_size = urb->dev->ep0.desc.wMaxPacketSize;
+	hw_max_packet_size = MAX_PACKET_DECODED(SWAP32(ep_ctx->ep_info2));
+	max_packet_size = SWAP16(urb->dev->ep0.desc.wMaxPacketSize);
 	if (hw_max_packet_size != max_packet_size) {
 		xhci_dbg(xhci, "Max Packet Size for ep 0 changed.\n");
 		xhci_dbg(xhci, "Max packet size in usb_device = %d\n",
@@ -664,6 +664,7 @@ static int xhci_check_maxpacket(struct xhci_hcd *xhci, unsigned int slot_id,
 				xhci->devs[slot_id]->out_ctx, ep_index);
 		in_ctx = xhci->devs[slot_id]->in_ctx;
 		ep_ctx = xhci_get_ep_ctx(xhci, in_ctx, ep_index);
+		swap_ep_ctx(ep_ctx);
 		ep_ctx->ep_info2 &= ~MAX_PACKET_MASK;
 		ep_ctx->ep_info2 |= MAX_PACKET(max_packet_size);
 
@@ -1018,7 +1019,7 @@ int xhci_drop_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	/* If the HC already knows the endpoint is disabled,
 	 * or the HCD has noted it is disabled, ignore this request
 	 */
-	if ((ep_ctx->ep_info & EP_STATE_MASK) == EP_STATE_DISABLED ||
+	if ((SWAP32(ep_ctx->ep_info) & EP_STATE_MASK) == EP_STATE_DISABLED ||
 			ctrl_ctx->drop_flags & xhci_get_endpoint_flag(&ep->desc)) {
 		xhci_warn(xhci, "xHCI %s called with disabled ep %p\n",
 				__func__, ep);
@@ -1288,7 +1289,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 		/* Enqueue pointer can be left pointing to the link TRB,
 		 * we must handle that
 		 */
-		if ((command->command_trb->link.control & TRB_TYPE_BITMASK)
+		if ((SWAP32(command->command_trb->link.control) & TRB_TYPE_BITMASK)
 				== TRB_TYPE(TRB_LINK))
 			command->command_trb =
 				xhci->cmd_ring->enq_seg->next->trbs;
@@ -1300,7 +1301,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 		cmd_status = &virt_dev->cmd_status;
 	}
 	init_completion(cmd_completion);
-
+	swap_container_ctx(xhci, in_ctx);
 	if (!ctx_change)
 		ret = xhci_queue_configure_endpoint(xhci, in_ctx->dma,
 				udev->slot_id, must_succeed);
@@ -1310,6 +1311,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	if (ret < 0) {
 		if (command)
 			list_del(&command->cmd_list);
+		swap_container_ctx(xhci, in_ctx);
 		spin_unlock_irqrestore(&xhci->lock, flags);
 		xhci_dbg(xhci, "FIXME allocate a new ring segment\n");
 		return -ENOMEM;
@@ -1321,6 +1323,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	timeleft = wait_for_completion_interruptible_timeout(
 			cmd_completion,
 			USB_CTRL_SET_TIMEOUT);
+	swap_container_ctx(xhci, in_ctx);
 	if (timeleft <= 0) {
 		xhci_warn(xhci, "%s while waiting for %s command\n",
 				timeleft == 0 ? "Timeout" : "Signal",
@@ -1446,6 +1449,7 @@ static void xhci_setup_input_ctx_for_config_ep(struct xhci_hcd *xhci,
 	ctrl_ctx->add_flags = add_flags;
 	ctrl_ctx->drop_flags = drop_flags;
 	xhci_slot_copy(xhci, in_ctx, out_ctx);
+	swap_slot_ctx(xhci_get_slot_ctx(xhci, in_ctx));
 	ctrl_ctx->add_flags |= SLOT_FLAG;
 
 	xhci_dbg(xhci, "Input Context:\n");
@@ -1465,6 +1469,7 @@ void xhci_setup_input_ctx_for_quirk(struct xhci_hcd *xhci,
 			xhci->devs[slot_id]->out_ctx, ep_index);
 	in_ctx = xhci->devs[slot_id]->in_ctx;
 	ep_ctx = xhci_get_ep_ctx(xhci, in_ctx, ep_index);
+	swap_ep_ctx(ep_ctx);
 	addr = xhci_trb_virt_to_dma(deq_state->new_deq_seg,
 			deq_state->new_deq_ptr);
 	if (addr == 0) {
@@ -1818,6 +1823,7 @@ int xhci_alloc_streams(struct usb_hcd *hcd, struct usb_device *udev,
 
 		xhci_endpoint_copy(xhci, config_cmd->in_ctx,
 				vdev->out_ctx, ep_index);
+		swap_ep_ctx(ep_ctx);
 		xhci_setup_streams_ep_input_ctx(xhci, ep_ctx,
 				vdev->eps[ep_index].stream_info);
 	}
@@ -1915,6 +1921,7 @@ int xhci_free_streams(struct usb_hcd *hcd, struct usb_device *udev,
 
 		xhci_endpoint_copy(xhci, command->in_ctx,
 				vdev->out_ctx, ep_index);
+		swap_ep_ctx(ep_ctx);
 		xhci_setup_no_streams_ep_input_ctx(xhci, ep_ctx,
 				&vdev->eps[ep_index]);
 	}
@@ -2006,7 +2013,7 @@ int xhci_reset_device(struct usb_hcd *hcd, struct usb_device *udev)
 	/* Enqueue pointer can be left pointing to the link TRB,
 	 * we must handle that
 	 */
-	if ((reset_device_cmd->command_trb->link.control & TRB_TYPE_BITMASK)
+	if ((SWAP32(reset_device_cmd->command_trb->link.control) & TRB_TYPE_BITMASK)
 			== TRB_TYPE(TRB_LINK))
 		reset_device_cmd->command_trb =
 			xhci->cmd_ring->enq_seg->next->trbs;
@@ -2219,9 +2226,11 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	xhci_dbg_ctx(xhci, virt_dev->in_ctx, 2);
 
 	spin_lock_irqsave(&xhci->lock, flags);
+	swap_container_ctx(xhci, virt_dev->in_ctx);
 	ret = xhci_queue_address_device(xhci, virt_dev->in_ctx->dma,
 					udev->slot_id);
 	if (ret) {
+	    swap_container_ctx(xhci, virt_dev->in_ctx);
 		spin_unlock_irqrestore(&xhci->lock, flags);
 		xhci_dbg(xhci, "FIXME: allocate a command ring segment\n");
 		return ret;
@@ -2232,6 +2241,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	/* ctrl tx can take up to 5 sec; XXX: need more time for xHC? */
 	timeleft = wait_for_completion_interruptible_timeout(&xhci->addr_dev,
 			USB_CTRL_SET_TIMEOUT);
+	swap_container_ctx(xhci, virt_dev->in_ctx);
 	/* FIXME: From section 4.3.4: "Software shall be responsible for timing
 	 * the SetAddress() "recovery interval" required by USB and aborting the
 	 * command on a timeout.
@@ -2286,7 +2296,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	 * address given back to us by the HC.
 	 */
 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->out_ctx);
-	udev->devnum = (slot_ctx->dev_state & DEV_ADDR_MASK) + 1;
+	udev->devnum = (SWAP32(slot_ctx->dev_state) & DEV_ADDR_MASK) + 1;
 	/* Zero the input context control for later use */
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, virt_dev->in_ctx);
 	ctrl_ctx->add_flags = 0;
@@ -2334,6 +2344,7 @@ int xhci_update_hub_device(struct usb_hcd *hcd, struct usb_device *hdev,
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, config_cmd->in_ctx);
 	ctrl_ctx->add_flags |= SLOT_FLAG;
 	slot_ctx = xhci_get_slot_ctx(xhci, config_cmd->in_ctx);
+	swap_slot_ctx(slot_ctx);
 	slot_ctx->dev_info |= DEV_HUB;
 	if (tt->multi)
 		slot_ctx->dev_info |= DEV_MTT;

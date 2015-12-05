@@ -33,6 +33,9 @@
 #include <linux/device_cgroup.h>
 #include <linux/fs_struct.h>
 #include <asm/uaccess.h>
+#ifdef S_MIRROR
+#include "s_mirror.h"
+#endif
 
 #include "internal.h"
 
@@ -1051,7 +1054,10 @@ out_fail:
 }
 
 /* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
-static int do_path_lookup(int dfd, const char *name,
+#ifndef S_MIRROR
+static
+#endif
+int do_path_lookup(int dfd, const char *name,
 				unsigned int flags, struct nameidata *nd)
 {
 	int retval = path_init(dfd, name, flags, nd);
@@ -1159,7 +1165,10 @@ out:
  * needs parent already locked. Doesn't follow mounts.
  * SMP-safe.
  */
-static struct dentry *lookup_hash(struct nameidata *nd)
+#ifndef S_MIRROR
+static
+#endif
+struct dentry *lookup_hash(struct nameidata *nd)
 {
 	int err;
 
@@ -2095,6 +2104,12 @@ SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, int, mode)
 	if (error)
 		goto out_drop_write;
 	error = vfs_mkdir(nd.path.dentry->d_inode, dentry, mode);
+#ifdef S_MIRROR
+	if( !error ) {
+		sm_sys_mkdir_mir((nd.path.mnt->mnt_mountpoint), dentry, mode);
+	}
+#endif
+
 out_drop_write:
 	mnt_drop_write(nd.path.mnt);
 out_dput:
@@ -2209,6 +2224,11 @@ static long do_rmdir(int dfd, const char __user *pathname)
 	if (error)
 		goto exit4;
 	error = vfs_rmdir(nd.path.dentry->d_inode, dentry);
+#ifdef S_MIRROR
+	if( !error )
+		sm_do_rmdir(nd.path.mnt->mnt_mountpoint, dentry);
+#endif
+
 exit4:
 	mnt_drop_write(nd.path.mnt);
 exit3:
@@ -2299,6 +2319,12 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 		if (error)
 			goto exit3;
 		error = vfs_unlink(nd.path.dentry->d_inode, dentry);
+#ifdef S_MIRROR
+		//printk(" %s S_MIRROR : error val :%d\n ",__FUNCTION__, error);
+		if( !error )
+			sm_sys_unlink(nd.path.mnt->mnt_mountpoint, dentry);
+#endif
+
 exit3:
 		mnt_drop_write(nd.path.mnt);
 	exit2:
@@ -2647,9 +2673,13 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	return error;
 }
-
+#ifndef S_MIRROR
 SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 		int, newdfd, const char __user *, newname)
+#else
+int do_rename(int olddfd, const char *oldname,
+		            int newdfd, const char *newname)
+#endif
 {
 	struct dentry *old_dir, *new_dir;
 	struct dentry *old_dentry, *new_dentry;
@@ -2659,6 +2689,7 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 	char *to;
 	int error;
 
+#ifndef S_MIRROR
 	error = user_path_parent(olddfd, oldname, &oldnd, &from);
 	if (error)
 		goto exit;
@@ -2666,7 +2697,15 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 	error = user_path_parent(newdfd, newname, &newnd, &to);
 	if (error)
 		goto exit1;
+#else
+    error = do_path_lookup(olddfd, oldname, LOOKUP_PARENT, &oldnd);
+	if (error)
+		goto exit;
 
+	error = do_path_lookup(newdfd, newname, LOOKUP_PARENT, &newnd);
+	if (error)
+		goto exit1;
+#endif
 	error = -EXDEV;
 	if (oldnd.path.mnt != newnd.path.mnt)
 		goto exit2;
@@ -2734,13 +2773,41 @@ exit3:
 	unlock_rename(new_dir, old_dir);
 exit2:
 	path_put(&newnd.path);
+#ifndef S_MIRROR
 	putname(to);
+#endif
 exit1:
 	path_put(&oldnd.path);
+#ifndef S_MIRROR
 	putname(from);
+#endif
 exit:
 	return error;
 }
+
+#ifdef S_MIRROR
+SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
+		        int, newdfd, const char __user *, newname)
+{
+	int error;
+	char * from;
+	char * to;
+
+	from = getname(oldname);
+	to = getname(newname);
+	if(IS_ERR(from))
+		return PTR_ERR(from);
+	if(IS_ERR(to)) {
+		putname(from);
+		return PTR_ERR(to);
+	}
+	error = sm_sys_renameat(olddfd, from, newdfd, to);
+	putname(to);
+	putname(from);
+	return error;
+}
+#endif
+
 
 SYSCALL_DEFINE2(rename, const char __user *, oldname, const char __user *, newname)
 {

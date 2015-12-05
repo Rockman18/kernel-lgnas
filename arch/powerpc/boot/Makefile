@@ -37,7 +37,11 @@ BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 
 DTS_FLAGS	?= -p 1024
 
+ifeq ($(CONFIG_40x),y)
 $(obj)/4xx.o: BOOTCFLAGS += -mcpu=405
+else
+$(obj)/4xx.o: BOOTCFLAGS += -mcpu=440
+endif
 $(obj)/ebony.o: BOOTCFLAGS += -mcpu=405
 $(obj)/cuboot-hotfoot.o: BOOTCFLAGS += -mcpu=405
 $(obj)/cuboot-taishan.o: BOOTCFLAGS += -mcpu=405

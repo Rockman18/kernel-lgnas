@@ -51,6 +51,10 @@
 #include <linux/mtd/partitions.h>
 #endif
 
+#ifdef CONFIG_MTD_NAND_BBM
+#include <linux/mtd/nand_bbm.h>
+#endif
+
 /* Define default oob placement schemes for large and small page devices */
 static struct nand_ecclayout nand_oob_8 = {
 	.eccbytes = 3,
@@ -1428,6 +1432,77 @@ static uint8_t *nand_transfer_oob(struct nand_chip *chip, uint8_t *oob,
 	return NULL;
 }
 
+#ifdef CONFIG_MTD_NAND_BBM
+unsigned int 
+nand_bbm_bb_remap(struct mtd_info *mtd, unsigned int *page)
+{
+	struct nand_chip *chip = mtd->priv;
+	unsigned int ofs = (*page << chip->page_shift);
+	unsigned int page_org, ofs_org;
+	unsigned long pos = 0;
+
+	if(!nand_bbm_check) 
+		return ofs;
+
+	ofs_org = ofs;
+	page_org = *page;
+
+	for (pos = BBM_INFO_START; pos < BBM_INFO_END; pos += mtd->erasesize) {
+		if((nand_bbm_bitmap[ofs>>chip->phys_erase_shift] & BBM_BB_MASK) != BBM_BB_MASK) {
+			if( ofs != ofs_org ) 
+				bbm_print("), page(%p->%p) !\n", (void*)page_org, (void*)*page);
+			return ofs;
+		} 
+
+		if( ofs == ofs_org ) 
+			bbm_print("[%s] Remap(0x%08x", __func__, (unsigned int)ofs_org);
+
+		ofs = ((nand_bbm_bitmap[ofs>>chip->phys_erase_shift] & BBM_IDX_MASK)<<chip->phys_erase_shift) | 
+			(ofs&(mtd->erasesize-1));
+
+		bbm_print("->0x%08x", (unsigned int)ofs);
+
+		*page = (unsigned int)(ofs >> chip->page_shift);
+		*page = *page & chip->pagemask;
+	}
+	bbm_print("\n******************************\n[NAND] Critical Error: Too many bad blocks!\n");
+
+	return (unsigned int)0xffffffff;
+}
+
+unsigned int 
+nand_bbm_bb_check(struct mtd_info *mtd, unsigned int ofs, int getchip)
+{
+	struct nand_chip *chip = mtd->priv;
+	unsigned long pos = 0;
+	unsigned int ofs_org;
+
+	if(!nand_bbm_check) 
+		return ofs;
+	
+	ofs_org = ofs;
+	for (pos = BBM_INFO_START; pos < BBM_INFO_END; pos += mtd->erasesize) {
+		if((nand_bbm_bitmap[ofs>>chip->phys_erase_shift] & BBM_BB_MASK) != BBM_BB_MASK) 
+			break;
+		ofs = ((nand_bbm_bitmap[ofs>>chip->phys_erase_shift] & BBM_IDX_MASK)<<chip->phys_erase_shift) 
+			| (ofs&(mtd->erasesize-1));
+	}
+			
+	if( ofs != ofs_org ) 
+		bbm_print("[%s] NAND_BBM_ADJUST(0x%08x -> 0x%08x) \n", __func__, (unsigned int)ofs_org, (unsigned int)ofs);
+
+	if(nand_block_checkbad (mtd, ofs, getchip, 0) != 0) {
+		bbm_print("\t0x%08x is bad block => ", (unsigned int)ofs);
+		ofs = (loff_t)nand_bbm_assign_block(mtd, (unsigned long)ofs, 0);
+		bbm_print("0x%08x\n", (unsigned int)ofs);
+	}
+
+	return ofs;
+}
+
+#endif
+
+
 /**
  * nand_do_read_ops - [Internal] Read data with ECC
  *
@@ -1446,6 +1521,9 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	int blkcheck = (1 << (chip->phys_erase_shift - chip->page_shift)) - 1;
 	int sndcmd = 1;
 	int ret = 0;
+#ifdef CONFIG_MTD_NAND_BBM
+	int ofs = 0;
+#endif
 	uint32_t readlen = ops->len;
 	uint32_t oobreadlen = ops->ooblen;
 	uint32_t max_oobsize = ops->mode == MTD_OOB_AUTO ?
@@ -1467,6 +1545,14 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	oob = ops->oobbuf;
 
 	while(1) {
+		#ifdef CONFIG_MTD_NAND_BBM
+		ofs = nand_bbm_bb_remap(mtd, &page);
+		if( ofs == 0xffffffff ) {
+			bbm_print("[%s] BBM remap fail !!\n", __func__);
+			break;
+		}
+		#endif
+		
 		bytes = min(mtd->writesize - col, readlen);
 		aligned = (bytes == mtd->writesize);
 
@@ -1559,10 +1645,19 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 		ops->oobretlen = ops->ooblen - oobreadlen;
 
 	if (ret)
+	{
+		bbm_print("bbm ofs = %x\n", ofs);
 		return ret;
+	}
 
 	if (mtd->ecc_stats.failed - stats.failed)
+	{
+		bbm_print("bbm ofs = %x\n", ofs);
 		return -EBADMSG;
+	}
+
+	if( mtd->ecc_stats.corrected - stats.corrected < 0 ) 
+		bbm_print("bbm ofs = %x\n", ofs);
 
 	return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
 }
@@ -1759,6 +1854,9 @@ static int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 	int blkcheck = (1 << (chip->phys_erase_shift - chip->page_shift)) - 1;
 	int readlen = ops->ooblen;
 	int len;
+#ifdef CONFIG_MTD_NAND_BBM
+	int ofs = 0;
+#endif
 	uint8_t *buf = ops->oobbuf;
 
 	DEBUG(MTD_DEBUG_LEVEL3, "%s: from = 0x%08Lx, len = %i\n",
@@ -1792,6 +1890,14 @@ static int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 	page = realpage & chip->pagemask;
 
 	while(1) {
+		#ifdef CONFIG_MTD_NAND_BBM
+		ofs = nand_bbm_bb_remap(mtd, &page);
+		if( ofs == 0xffffffff ) {
+			bbm_print("[%s] BBM remap fail !!\n", __func__);
+			break;
+		}
+		#endif
+		
 		sndcmd = chip->ecc.read_oob(mtd, chip, page, sndcmd);
 
 		len = min(len, readlen);
@@ -2162,6 +2268,10 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 	uint8_t *buf = ops->datbuf;
 	int ret, subpage;
 
+#ifdef CONFIG_MTD_NAND_BBM
+	unsigned int ofs, page_org;
+	unsigned int new_ofs;
+#endif
 	ops->retlen = 0;
 	if (!writelen)
 		return 0;
@@ -2207,7 +2317,16 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 		int bytes = mtd->writesize;
 		int cached = writelen > bytes && page != blockmask;
 		uint8_t *wbuf = buf;
-
+		#ifdef CONFIG_MTD_NAND_BBM
+		page_org = page;
+		ret = nand_bbm_bb_remap(mtd, &page);
+		if( ret == 0xffffffff ) {
+			bbm_print("[%s] BBM remap fail !!\n", __func__);
+			break;
+		}
+		ofs = ret;
+		#endif
+		
 		/* Partial page write ? */
 		if (unlikely(column || writelen < (mtd->writesize - 1))) {
 			cached = 0;
@@ -2227,7 +2346,20 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 		ret = chip->write_page(mtd, chip, wbuf, page, cached,
 				       (ops->mode == MTD_OOB_RAW));
 		if (ret)
+		{
+#ifdef CONFIG_MTD_NAND_BBM
+			// chip->block_markbad(mtd, PAGE_POS(chip, page));
+			printk(KERN_WARNING "\t%s] 0x%08x is bad block => ", __func__, (unsigned int)ofs);
+			new_ofs = (loff_t)nand_bbm_assign_block(mtd, (unsigned long)ofs, 1);
+			printk(KERN_WARNING "0x%08x\n", (unsigned int)ofs);
+			if( ofs != new_ofs ) {
+				ofs = new_ofs;
+				page = page_org;
+				continue;
+			}
+#endif
 			break;
+    }
 
 		writelen -= bytes;
 		if (!writelen)
@@ -2514,6 +2646,10 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 	loff_t rewrite_bbt[NAND_MAX_CHIPS]={0};
 	unsigned int bbt_masked_page = 0xffffffff;
 	loff_t len;
+#ifdef CONFIG_MTD_NAND_BBM
+	int page_org;
+	int ofs;
+#endif
 
 	DEBUG(MTD_DEBUG_LEVEL3, "%s: start = 0x%012llx, len = %llu\n",
 				__func__, (unsigned long long)instr->addr,
@@ -2560,6 +2696,13 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 	instr->state = MTD_ERASING;
 
 	while (len) {
+#ifdef CONFIG_MTD_NAND_BBM
+		page_org = page;
+		ofs = (page << chip->page_shift);
+		ofs = nand_bbm_bb_check(mtd, ofs, 0);
+		page = (int) (ofs >> chip->page_shift);
+		page = page & chip->pagemask;
+#endif
 		/*
 		 * heck if we have a bad block, we do not erase bad blocks !
 		 */
@@ -2610,6 +2753,10 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 			    rewrite_bbt[chipnr] =
 					((loff_t)page << chip->page_shift);
 
+		#ifdef CONFIG_MTD_NAND_BBM
+		page = page_org;
+		#endif
+		
 		/* Increment page address and decrement length */
 		len -= (1 << chip->phys_erase_shift);
 		page += pages_per_block;
@@ -2676,6 +2823,10 @@ static void nand_sync(struct mtd_info *mtd)
 
 	DEBUG(MTD_DEBUG_LEVEL3, "%s: called\n", __func__);
 
+#ifdef CONFIG_MTD_NAND_BBM
+	NAND_BBM_UPDATE(mtd);
+#endif
+	
 	/* Grab the lock and see if the device is available */
 	nand_get_device(chip, mtd, FL_SYNCING);
 	/* Release it and go back */
@@ -2692,6 +2843,10 @@ static int nand_block_isbad(struct mtd_info *mtd, loff_t offs)
 	/* Check for invalid offset */
 	if (offs > mtd->size)
 		return -EINVAL;
+
+#ifdef CONFIG_MTD_NAND_BBM
+	offs = nand_bbm_bb_check(mtd, offs, 1);
+#endif 
 
 	return nand_block_checkbad(mtd, offs, 1, 0);
 }

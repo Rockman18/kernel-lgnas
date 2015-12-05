@@ -19,6 +19,8 @@ else
 obj-y +=	no-block.o
 endif
 
+# S_MIRROR
+obj-$(CONFIG_SELECTIVE_MIRROR)  += s_mirror.o
 obj-$(CONFIG_BLK_DEV_INTEGRITY) += bio-integrity.o
 obj-y				+= notify/
 obj-$(CONFIG_EPOLL)		+= eventpoll.o

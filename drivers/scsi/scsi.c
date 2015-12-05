@@ -159,6 +159,31 @@ static struct scsi_host_cmd_pool scsi_cmd_dma_pool = {
 
 static DEFINE_MUTEX(host_cmd_pool_mutex);
 
+void (*scsi_led_act)(unsigned int dev_no, int act);
+static void scsi_led_activity(struct scsi_cmnd *cmd, int act)
+{
+	struct Scsi_Host *host = cmd->device->host;
+	struct scsi_device *dev = cmd->device;
+	if(dev->type == 0x05) {
+		switch(cmd->cmnd[0]) {
+		case READ_6:
+		case READ_10:
+		case READ_12:
+		case WRITE_6:
+		case WRITE_10:
+		case WRITE_12:
+		case 0xbe:
+		case 0xbf:
+		case 0x5d:
+			break;
+		default:
+			return;
+		}
+	}
+	if(scsi_led_act)
+		scsi_led_act(host->host_no + dev->channel, act);
+}
+
 /**
  * scsi_pool_alloc_command - internal function to get a fully allocated command
  * @pool:	slab pool to allocate the command from
@@ -654,6 +679,8 @@ int scsi_dispatch_cmd(struct scsi_cmnd *cmd)
 	unsigned long flags = 0;
 	unsigned long timeout;
 	int rtn = 0;
+	
+	scsi_led_activity(cmd, 1);
 
 	atomic_inc(&cmd->device->iorequest_cnt);
 
@@ -788,6 +815,7 @@ static void scsi_done(struct scsi_cmnd *cmd)
 {
 	trace_scsi_dispatch_cmd_done(cmd);
 	blk_complete_request(cmd->request);
+	scsi_led_activity(cmd, 0);
 }
 
 /* Move this to a header if it becomes more generally useful */
@@ -1312,6 +1340,13 @@ MODULE_LICENSE("GPL");
 module_param(scsi_logging_level, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(scsi_logging_level, "a bit mask of logging levels");
 
+#if defined(CONFIG_MACH_NT1) || \
+    defined(CONFIG_MACH_NT11) || \
+    defined(CONFIG_MACH_NT3)
+/* NT1 ESK added */
+unsigned char *gadgetBuf;
+EXPORT_SYMBOL(gadgetBuf);
+#endif
 static int __init init_scsi(void)
 {
 	int error;
@@ -1337,8 +1372,24 @@ static int __init init_scsi(void)
 
 	scsi_netlink_init();
 
+#if defined(CONFIG_MACH_NT1) || \
+    defined(CONFIG_MACH_NT11) || \
+    defined(CONFIG_MACH_NT3)
+    /* NT1 ESK added */
+    //gadgetBuf = kmalloc(1048576, GFP_KERNEL); /* 1MB gadget buffer, NT1 ESK */
+    gadgetBuf = kmalloc(524288, GFP_KERNEL); /* 512KB gadget buffer, NT1 ESK */
+    if (!gadgetBuf) {
+        printk("ERROR : 1MB memory allocation fail!!!!!\n\n");
+    }
+    else {
+#endif
 	printk(KERN_NOTICE "SCSI subsystem initialized\n");
 	return 0;
+#if defined(CONFIG_MACH_NT1) || \
+    defined(CONFIG_MACH_NT11) || \
+    defined(CONFIG_MACH_NT3)
+		}
+#endif
 
 cleanup_sysctl:
 	scsi_exit_sysctl();

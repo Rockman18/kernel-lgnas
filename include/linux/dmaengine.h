@@ -106,6 +106,11 @@ enum dma_ctrl_flags {
 	DMA_PREP_PQ_DISABLE_Q = (1 << 7),
 	DMA_PREP_CONTINUE = (1 << 8),
 	DMA_PREP_FENCE = (1 << 9),
+
+	DMA_PREP_HAVE_P = (1 << 10),
+	DMA_PREP_HAVE_Q = (1 << 11),
+	DMA_PREP_ZERO_P = (1 << 12),
+	DMA_PREP_ZERO_Q = (1 << 13),
 };
 
 /**
@@ -144,6 +149,8 @@ enum sum_check_flags {
 	SUM_CHECK_P_RESULT = (1 << SUM_CHECK_P),
 	SUM_CHECK_Q_RESULT = (1 << SUM_CHECK_Q),
 };
+#define DMA_PCHECK_FAILED       (1 << 0)
+#define DMA_QCHECK_FAILED       (1 << 1)
 
 
 /**

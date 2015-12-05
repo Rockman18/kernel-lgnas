@@ -23,6 +23,8 @@
 
 #define KIRKWOOD_MAX_STATES	2
 
+int enter_cpuidle;
+
 static struct cpuidle_driver kirkwood_idle_driver = {
 	.name =         "kirkwood_idle",
 	.owner =        THIS_MODULE,
@@ -39,6 +41,8 @@ static int kirkwood_enter_idle(struct cpuidle_device *dev,
 
 	local_irq_disable();
 	do_gettimeofday(&before);
+	if(!enter_cpuidle)
+		goto __skip__;
 	if (state == &dev->states[0])
 		/* Wait for interrupt state */
 		cpu_do_idle();
@@ -53,6 +57,7 @@ static int kirkwood_enter_idle(struct cpuidle_device *dev,
 		writel(0x7, DDR_OPERATION_BASE);
 		cpu_do_idle();
 	}
+__skip__:
 	do_gettimeofday(&after);
 	local_irq_enable();
 	idle_time = (after.tv_sec - before.tv_sec) * USEC_PER_SEC +

@@ -1391,7 +1391,7 @@ alloc_new_skb:
 						err = -EMSGSIZE;
 						goto error;
 					}
-					get_page(page);
+					net_get_page(page);
 					skb_fill_page_desc(skb, i, page, sk->sk_sndmsg_off, 0);
 					frag = &skb_shinfo(skb)->frags[i];
 				}

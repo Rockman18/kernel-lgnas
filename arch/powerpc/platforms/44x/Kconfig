@@ -98,8 +98,42 @@ config ARCHES
 	select 460EX # Odd since it uses 460GT but the effects are the same
 	select PCI
 	select PPC4xx_PCI_EXPRESS
+	select IBM_NEW_EMAC_RGMII
 	help
 	  This option enables support for the AMCC Dual PPC460GT evaluation board.
+
+config BEECH
+	bool "Beech"
+	depends on 44x
+	default n
+	select PPC44x_SIMPLE
+	select APM82181
+	select PPC4xx_PCI_EXPRESS
+	select IBM_NEW_EMAC_RGMII
+	help
+	  This option enables support for the AMCC APM82181 validation board.
+
+config BLUESTONE
+	bool "Bluestone"
+	depends on 44x
+	default n
+	select PPC44x_SIMPLE
+	select APM82181
+	select PPC4xx_PCI_EXPRESS
+	select IBM_NEW_EMAC_RGMII
+	help
+	  This option enables support for the AMCC APM82181 evaluation board.
+
+config HLDS_NAS
+	bool "HLDS NAS"
+	depends on 44x
+	default n
+	select PPC44x_SIMPLE
+	select APM82181
+	select PPC4xx_PCI_EXPRESS
+	select IBM_NEW_EMAC_RGMII
+	help
+	  This option enables support for the HLDS_NAS (APM82181) board.
 
 config CANYONLANDS
 	bool "Canyonlands"
@@ -113,6 +147,20 @@ config CANYONLANDS
 	select IBM_NEW_EMAC_ZMII
 	help
 	  This option enables support for the AMCC PPC460EX evaluation board.
+
+config ACER
+	bool "Acer 460EX/EXr/431EXr"
+	depends on 44x
+	default n
+	select 460EX
+	select PPC44x_SIMPLE
+	select PCI
+	select PPC4xx_PCI_EXPRESS
+	select IBM_NEW_EMAC_RGMII
+	select IBM_NEW_EMAC_ZMII
+
+	help
+	  This option enables support for the AMCC Acer validation board. Acer board has socketed CPU - but ONLY 460EX and 460EX variants (460EXr/431EXr) are currently supported.
 
 config GLACIER
 	bool "Glacier"
@@ -240,6 +288,19 @@ config PPC4xx_GPIO
 	help
 	  Enable gpiolib support for ppc440 based boards
 
+config PPC4xx_OCM
+	bool "PPC4xx On Chip Memory (OCM) support"
+	depends on 4xx
+	select PPC_LIB_RHEAP
+	help
+	  Enable OCM support for PowerPC 4xx platforms with on chip memory.
+
+config PPC4xx_CPM
+	bool "PPC4xx Clock Power Management (CPM) support"
+	depends on 4xx
+	help
+	  Enable CPM support for PowerPC 4xx platforms.
+
 # 44x specific CPU modules, selected based on the board above.
 config 440EP
 	bool
@@ -268,8 +329,8 @@ config 440GP
 config 440GX
 	bool
 	select IBM_NEW_EMAC_EMAC4
-	select IBM_NEW_EMAC_RGMII
-	select IBM_NEW_EMAC_ZMII #test only
+#	select IBM_NEW_EMAC_RGMII
+#	select IBM_NEW_EMAC_ZMII #test only
 	select IBM_NEW_EMAC_TAH  #test only
 
 config 440SP
@@ -291,6 +352,12 @@ config 460SX
 	select IBM_NEW_EMAC_EMAC4
 	select IBM_NEW_EMAC_RGMII
 	select IBM_NEW_EMAC_ZMII
+	select IBM_NEW_EMAC_TAH
+
+config APM82181
+	bool
+	select PPC_FPU
+	select IBM_NEW_EMAC_EMAC4
 	select IBM_NEW_EMAC_TAH
 
 # 44x errata/workaround config symbols, selected by the CPU models above

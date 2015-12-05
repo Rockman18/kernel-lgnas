@@ -118,10 +118,12 @@
 #define MAL_TXCARR		0x05
 #define MAL_TXEOBISR		0x06
 #define MAL_TXDEIR		0x07
+#define MAL_TXBADDR		0x09
 #define MAL_RXCASR		0x10
 #define MAL_RXCARR		0x11
 #define MAL_RXEOBISR		0x12
 #define MAL_RXDEIR		0x13
+#define MAL_RXBADDR		0x15
 #define MAL_TXCTPR(n)		((n) + 0x20)
 #define MAL_RXCTPR(n)		((n) + 0x40)
 #define MAL_RCBS(n)		((n) + 0x60)
@@ -169,7 +171,71 @@ struct mal_descriptor {
 #define MAL_TX_CTRL_LAST	0x1000
 #define MAL_TX_CTRL_INTR	0x0400
 
+#define MAL_DESC_MEM_SDRAM	0x0
+#define MAL_DESC_MEM_OCM	0x1
+
+#if defined(CONFIG_405EX)
+#define DCRN_SDR0_ICCRTX	0x430B /* Int coal Tx control register */
+#define DCRN_SDR0_ICCRRX	0x430C /* Int coal Rx control register */
+#define SDR0_ICC_FTHR0_SHIFT	23
+#define SDR0_ICC_FLUSH0		22
+#define SDR0_ICC_FLUWI0		21
+#define SDR0_ICC_FTHR1_SHIFT	12
+#define SDR0_ICC_FLUSH1		11
+#define SDR0_ICC_FLUWI1		10
+#define DCRN_SDR0_ICCTRTX0	0x430D /* Int coal Tx0 count threshold */
+#define DCRN_SDR0_ICCTRTX1	0x430E /* Int coal Tx1 count threshold */
+#define DCRN_SDR0_ICCTRRX0	0x430F /* Int coal Rx0 count threshold */
+#define DCRN_SDR0_ICCTRRX1	0x4310 /* Int coal Rx1 count threshold */
+#define DCRN_SDR0_ICTSRTX0	0x4307 /* Int coal Tx0 timer status*/
+#define DCRN_SDR0_ICTSRTX1	0x4308 /* Int coal Tx1 timer status*/
+#define DCRN_SDR0_ICTSRRX0	0x4309 /* Int coal Rx0 timer status*/
+#define DCRN_SDR0_ICTSRRX1	0x430A /* Int coal Rx1 timer status*/
+#elif defined(CONFIG_APM82181)
+#define DCRN_SDR0_ICCRTX0       0x4410 /* Int coal Tx0 control register */
+#define DCRN_SDR0_ICCRRX0       0x4414 /* Int coal Rx0 control register */
+#define SDR0_ICC_FTHR_SHIFT     23
+#define SDR0_ICC_FLUSH          22
+#define SDR0_ICC_FLUWI          21
+#define DCRN_SDR0_ICCTRTX0      0x4418 /* Int coal Tx0 count threshold */
+#define DCRN_SDR0_ICCTRRX0      0x441C /* Int coal Rx0 count threshold */
+#define DCRN_SDR0_ICTSRTX0      0x4420 /* Int coal Tx0 timer status*/
+#define DCRN_SDR0_ICTSRRX0      0x4424 /* Int coal Rx0 timer status*/
+#elif defined(CONFIG_460EX) || defined(CONFIG_460GT) || defined(CONFIG_460SX)
+#define DCRN_SDR0_ICCRTX0	0x4410 /* Int coal Tx0 control register */
+#define DCRN_SDR0_ICCRTX1	0x4411 /* Int coal Tx1 control register */
+#define DCRN_SDR0_ICCRTX2	0x4412 /* Int coal Tx2 control register */
+#define DCRN_SDR0_ICCRTX3	0x4413 /* Int coal Tx3 control register */
+#define DCRN_SDR0_ICCRRX0	0x4414 /* Int coal Rx0 control register */
+#define DCRN_SDR0_ICCRRX1	0x4415 /* Int coal Rx1 control register */
+#define DCRN_SDR0_ICCRRX2	0x4416 /* Int coal Rx2 control register */
+#define DCRN_SDR0_ICCRRX3	0x4417 /* Int coal Rx3 control register */
+#define SDR0_ICC_FTHR_SHIFT	23
+#define SDR0_ICC_FLUSH		22
+#define SDR0_ICC_FLUWI		21
+#define DCRN_SDR0_ICCTRTX0	0x4418 /* Int coal Tx0 count threshold */
+#define DCRN_SDR0_ICCTRTX1	0x4419 /* Int coal Tx1 count threshold */
+#define DCRN_SDR0_ICCTRTX2	0x441A /* Int coal Tx2 count threshold */
+#define DCRN_SDR0_ICCTRTX3	0x441B /* Int coal Tx3 count threshold */
+#define DCRN_SDR0_ICCTRRX0	0x441C /* Int coal Rx0 count threshold */
+#define DCRN_SDR0_ICCTRRX1	0x441D /* Int coal Rx1 count threshold */
+#define DCRN_SDR0_ICCTRRX2	0x441E /* Int coal Rx2 count threshold */
+#define DCRN_SDR0_ICCTRRX3	0x441F /* Int coal Rx3 count threshold */
+#define DCRN_SDR0_ICTSRTX0	0x4420 /* Int coal Tx0 timer status*/
+#define DCRN_SDR0_ICTSRTX1	0x4421 /* Int coal Tx1 timer status*/
+#define DCRN_SDR0_ICTSRTX2	0x4422 /* Int coal Tx2 timer status*/
+#define DCRN_SDR0_ICTSRTX3	0x4423 /* Int coal Tx3 timer status*/
+#define DCRN_SDR0_ICTSRRX0	0x4424 /* Int coal Rx0 timer status*/
+#define DCRN_SDR0_ICTSRRX1	0x4425 /* Int coal Rx1 timer status*/
+#define DCRN_SDR0_ICTSRRX2	0x4426 /* Int coal Rx2 timer status*/
+#define DCRN_SDR0_ICTSRRX3	0x4427 /* Int coal Rx3 timer status*/
+#endif
+
+#define COAL_FRAME_MASK		0x1FF
+#define MAL_MAX_PHYS_CHANNELS	4
+
 struct mal_commac_ops {
+	void	(*reset)   (void *dev);
 	void	(*poll_tx) (void *dev);
 	int	(*poll_rx) (void *dev, int budget);
 	int	(*peek_rx) (void *dev);
@@ -188,10 +254,22 @@ struct mal_commac {
 	struct list_head	list;
 };
 
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+struct mal_coales_param 
+{
+	/* Configuration parameters for the coalescing function */
+	int                     tx_count;
+	int                     tx_time;
+	int                     rx_count;
+	int                     rx_time;
+};
+#endif
+
 struct mal_instance {
 	int			version;
 	dcr_host_t		dcr_host;
 
+	int			desc_memory;	/* SDRAM or OCM */
 	int			num_tx_chans;	/* Number of TX channels */
 	int			num_rx_chans;	/* Number of RX channels */
 	int 			txeob_irq;	/* TX End Of Buffer IRQ  */
@@ -199,6 +277,27 @@ struct mal_instance {
 	int			txde_irq;	/* TX Descriptor Error IRQ */
 	int			rxde_irq;	/* RX Descriptor Error IRQ */
 	int			serr_irq;	/* MAL System Error IRQ    */
+
+#if defined(CONFIG_IBM_NEW_EMAC_INTR_COALESCE)
+
+	int			txcoal0_irq;     /* COAL */
+	int			txcoal1_irq;     /* COAL */
+	int                     txcoal2_irq;     /* COAL */
+	int                     txcoal3_irq;     /* COAL */
+	int			rxcoal0_irq;    /* COAL */
+	int			rxcoal1_irq;     /* COAL */
+	int                     rxcoal2_irq;     /* COAL */
+	int                     rxcoal3_irq;     /* COAL */
+
+	struct mal_coales_param coales_param[4];
+	/* add copy of iccrtx and iccrrx registers
+	 * to bypass the bug on the 440EPX pass1 where these
+	 * registers are write only
+	 */
+	u32     enet_coales_iccrtx;
+	u32     enet_coales_iccrrx;
+	struct timer_list mal_coal_timer;
+#endif
 
 	struct list_head	poll_list;
 	struct napi_struct	napi;
@@ -208,6 +307,7 @@ struct mal_instance {
 	u32			rx_chan_mask;
 
 	dma_addr_t		bd_dma;
+	phys_addr_t		bd_phys;
 	struct mal_descriptor	*bd_virt;
 
 	struct platform_device	*ofdev;
@@ -217,6 +317,11 @@ struct mal_instance {
 	struct net_device	dummy_dev;
 
 	unsigned int features;
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+	int			txcoal_irq[MAL_MAX_PHYS_CHANNELS];	/* MAL TxCoalesce Error IRQ    */
+	int			rxcoal_irq[MAL_MAX_PHYS_CHANNELS];	/* MAL RxCoalesce IRQ    */
+	int			coalesce_disabled;	/* Coalesce disable flag    */
+#endif
 };
 
 static inline u32 get_mal_dcrn(struct mal_instance *mal, int reg)
@@ -284,6 +389,9 @@ void mal_disable_rx_channel(struct mal_instance *mal, int channel);
 
 void mal_poll_disable(struct mal_instance *mal, struct mal_commac *commac);
 void mal_poll_enable(struct mal_instance *mal, struct mal_commac *commac);
+#ifdef CONFIG_IBM_NEW_EMAC_INTR_COALESCE
+void mal_enable_coal(struct mal_instance *mal);
+#endif
 
 /* Add/remove EMAC to/from MAL polling list */
 void mal_poll_add(struct mal_instance *mal, struct mal_commac *commac);

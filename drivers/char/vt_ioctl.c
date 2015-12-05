@@ -540,8 +540,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * and 2.6.36, which was a minor but unfortunate ABI
 		 * change.
 		 */
+    //printk("%s called arg1: 0x%lx  ",__FUNCTION__,arg);
 		if (arg)
 			arg = PIT_TICK_RATE / arg;
+    //printk("arg2: 0x%lx\n",arg);
 		kd_mksound(arg, 0);
 		break;
 

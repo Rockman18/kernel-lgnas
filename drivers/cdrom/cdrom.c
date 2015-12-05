@@ -288,11 +288,15 @@
 /* used to tell the module to turn on full debugging messages */
 static int debug;
 /* used to keep tray locked at all times */
-static int keeplocked;
+static int keeplocked=1;
 /* default compatibility mode */
 static int autoclose=1;
 static int autoeject;
+#if 0
 static int lockdoor = 1;
+#else
+static int lockdoor = 0;
+#endif
 /* will we ever get to use this... sigh. */
 static int check_media_type;
 /* automatically restart mrw format */

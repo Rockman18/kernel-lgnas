@@ -9,6 +9,11 @@
 
 #ifdef __KERNEL__
 
+#undef S_MIRROR
+#ifdef CONFIG_SELECTIVE_MIRROR
+#define S_MIRROR
+#endif
+
 #include <stdarg.h>
 #include <linux/linkage.h>
 #include <linux/stddef.h>

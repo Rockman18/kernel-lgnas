@@ -418,7 +418,9 @@ void ata_sff_tf_load(struct ata_port *ap, const struct ata_taskfile *tf)
 		if (ioaddr->ctl_addr)
 			iowrite8(tf->ctl, ioaddr->ctl_addr);
 		ap->last_ctl = tf->ctl;
+#ifndef CONFIG_MACH_APM
 		ata_wait_idle(ap);
+#endif
 	}
 
 	if (is_addr && (tf->flags & ATA_TFLAG_LBA48)) {
@@ -455,7 +457,9 @@ void ata_sff_tf_load(struct ata_port *ap, const struct ata_taskfile *tf)
 		VPRINTK("device 0x%X\n", tf->device);
 	}
 
+#ifndef CONFIG_MACH_APM
 	ata_wait_idle(ap);
+#endif
 }
 EXPORT_SYMBOL_GPL(ata_sff_tf_load);
 
@@ -1542,11 +1546,13 @@ static unsigned int __ata_sff_port_intr(struct ata_port *ap,
 	/* check main status, clearing INTRQ if needed */
 	status = ata_sff_irq_status(ap);
 	if (status & ATA_BUSY) {
+#if !defined(CONFIG_MACH_NT1) && !defined(CONFIG_MACH_NT11)
 		if (hsmv_on_idle) {
 			/* BMDMA engine is already stopped, we're screwed */
 			qc->err_mask |= AC_ERR_HSM;
 			ap->hsm_task_state = HSM_ST_ERR;
 		} else
+#endif
 			return ata_sff_idle_irq(ap);
 	}
 
@@ -2756,6 +2762,23 @@ unsigned int ata_bmdma_qc_issue(struct ata_queued_cmd *qc)
 	struct ata_port *ap = qc->ap;
 	struct ata_link *link = qc->dev->link;
 
+#if defined(CONFIG_MACH_APM) && defined(CONFIG_MACH_NC5)
+  /*
+	   In case NT3, This is useless and 
+		 Invalid change kernel event of ATAPI is issued
+		 in User space. so I blocked this. jwb
+  */
+	/* 
+	   * At this point, HDD should be ready for accessing.
+	   * But if user accidentally pulls out the HDD (using eSATA is one case),
+	   * we should try to avoid a system crash by this check.
+	*/ 
+	if (sata_async_notification(ap)) {
+		  return AC_ERR_SYSTEM;
+	}
+#endif
+		
+
 	/* defer PIO handling to sff_qc_issue */
 	if (!ata_is_dma(qc->tf.protocol))
 		return ata_sff_qc_issue(qc);
@@ -2819,11 +2842,11 @@ unsigned int ata_bmdma_port_intr(struct ata_port *ap, struct ata_queued_cmd *qc)
 		/* check status of DMA engine */
 		host_stat = ap->ops->bmdma_status(ap);
 		VPRINTK("ata%u: host_stat 0x%X\n", ap->print_id, host_stat);
-
+#if !defined(CONFIG_MACH_NT1) && !defined(CONFIG_MACH_NT11)
 		/* if it's not our irq... */
 		if (!(host_stat & ATA_DMA_INTR))
 			return ata_sff_idle_irq(ap);
-
+#endif
 		/* before we do anything else, clear DMA-Start bit */
 		ap->ops->bmdma_stop(qc);
 		bmdma_stopped = true;

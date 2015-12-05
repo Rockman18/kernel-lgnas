@@ -153,6 +153,7 @@ static int __init ppc4xx_l2c_probe(void)
 	/* Clear Cache Parity and Tag Errors */
 	mtdcr(dcrbase_l2c + DCRN_L2C0_CMD, L2C_CMD_CCP | L2C_CMD_CTE);
 
+#if defined(CONFIG_DCU_ENABLE)
 	/* Enable 64G snoop region starting at 0 */
 	r = mfdcr(dcrbase_l2c + DCRN_L2C0_SNP0) &
 		~(L2C_SNP_BA_MASK | L2C_SNP_SSR_MASK);
@@ -163,20 +164,28 @@ static int __init ppc4xx_l2c_probe(void)
 		~(L2C_SNP_BA_MASK | L2C_SNP_SSR_MASK);
 	r |= 0x80000000 | L2C_SNP_SSR_32G | L2C_SNP_ESR;
 	mtdcr(dcrbase_l2c + DCRN_L2C0_SNP1, r);
-
+#endif
 	asm volatile ("sync" ::: "memory");
 
 	/* Enable ICU/DCU ports */
 	r = mfdcr(dcrbase_l2c + DCRN_L2C0_CFG);
 	r &= ~(L2C_CFG_DCW_MASK | L2C_CFG_PMUX_MASK | L2C_CFG_PMIM
 	       | L2C_CFG_TPEI | L2C_CFG_CPEI | L2C_CFG_NAM | L2C_CFG_NBRM);
-	r |= L2C_CFG_ICU | L2C_CFG_DCU | L2C_CFG_TPC | L2C_CFG_CPC | L2C_CFG_FRAN
+	r |= L2C_CFG_ICU | L2C_CFG_TPC | L2C_CFG_CPC | L2C_CFG_FRAN
 		| L2C_CFG_CPIM | L2C_CFG_TPIM | L2C_CFG_LIM | L2C_CFG_SMCM;
+
+#if defined(CONFIG_DCU_ENABLE)
+	r |= L2C_CFG_DCU;
+#endif
 
 	/* Check for 460EX/GT special handling */
 	if (of_device_is_compatible(np, "ibm,l2-cache-460ex") ||
-	    of_device_is_compatible(np, "ibm,l2-cache-460gt"))
+	    of_device_is_compatible(np, "ibm,l2-cache-460gt")) {
 		r |= L2C_CFG_RDBW;
+#if defined(CONFIG_DCU_ENABLE)
+		r |= L2C_CFG_SNP440;
+#endif
+	}
 
 	mtdcr(dcrbase_l2c + DCRN_L2C0_CFG, r);
 

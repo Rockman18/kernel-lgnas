@@ -122,6 +122,10 @@
 #define SIOCBRADDIF	0x89a2		/* add interface to bridge      */
 #define SIOCBRDELIF	0x89a3		/* remove interface from bridge */
 
+/* Macsec calls */
+#define SIOCSETMACSEC	0x89a4		/* Enable macsec on this Interface */
+#define SIOCUNSETMACSEC	0x89a5		/* disable macsec on this Interface */
+
 /* hardware time stamping: parameters in linux/net_tstamp.h */
 #define SIOCSHWTSTAMP   0x89b0
 

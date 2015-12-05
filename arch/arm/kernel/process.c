@@ -215,7 +215,12 @@ void machine_shutdown(void)
 void machine_halt(void)
 {
 	machine_shutdown();
+#if 0
 	while (1);
+#else
+	if(pm_power_off)
+		pm_power_off();
+#endif
 }
 
 void machine_power_off(void)

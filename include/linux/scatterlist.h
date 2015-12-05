@@ -3,6 +3,7 @@
 
 #include <asm/types.h>
 #include <asm/scatterlist.h>
+#include <asm/kmap_types.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <asm/io.h>
@@ -217,6 +218,10 @@ size_t sg_copy_from_buffer(struct scatterlist *sgl, unsigned int nents,
 			   void *buf, size_t buflen);
 size_t sg_copy_to_buffer(struct scatterlist *sgl, unsigned int nents,
 			 void *buf, size_t buflen);
+
+int sg_copy(struct scatterlist *dst_sg, struct scatterlist *src_sg,
+	    int nents_to_copy, size_t copy_len,
+	    enum km_type d_km_type, enum km_type s_km_type);
 
 /*
  * Maximum number of entries that will be allocated in one piece, if

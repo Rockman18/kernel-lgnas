@@ -27,6 +27,13 @@ config IBM_NEW_EMAC_RX_COPY_THRESHOLD
 	depends on IBM_NEW_EMAC
 	default "256"
 
+config IBM_EMAC_MAL_QOS_V404
+	bool "VLAN QOS support"
+	depends on IBM_NEW_EMAC && 460SX
+	select VLAN_8021Q
+	help
+	  When selected the VLAN QOS support will be enabled.	
+
 config IBM_NEW_EMAC_RX_SKB_HEADROOM
 	int "Additional RX skb headroom (bytes)"
 	depends on IBM_NEW_EMAC
@@ -38,6 +45,17 @@ config IBM_NEW_EMAC_RX_SKB_HEADROOM
 	  headroom.
 
 	  If unsure, set to 0.
+
+config IBM_NEW_EMAC_MASK_CEXT
+	bool "Mask Carrier Extension signals"
+	depends on IBM_NEW_EMAC && APM82181
+	default n
+	help
+	  During normal idle TX, continously send dummy packets to mask 
+	  the Carrier Extension signals. This creates a separate BD 
+	  specifically for this purpose.
+
+	  If unsure, set to N.
 
 config IBM_NEW_EMAC_DEBUG
 	bool "Debugging"
@@ -63,6 +81,33 @@ config IBM_NEW_EMAC_EMAC4
 	bool
 	default n
 
+config IBM_NEW_EMAC_INTR_COALESCE
+	bool "Hardware Interrupt coalescing"
+	depends on IBM_NEW_EMAC && (460EX || 460GT || 405EX || 460SX || APM82181)
+	default y
+	help
+	  When selected the Ethernet interrupt coalescing is selected.
+
+config IBM_NEW_EMAC_TX_COAL_COUNT
+	int "TX Coalescence frame count (packets)"
+	depends on IBM_NEW_EMAC_INTR_COALESCE
+	default "16"
+
+config IBM_NEW_EMAC_TX_COAL_TIMER
+	int "TX Coalescence timer (clock ticks)"
+	depends on IBM_NEW_EMAC_INTR_COALESCE
+	default "1000000"
+
+config IBM_NEW_EMAC_RX_COAL_COUNT
+	int "RX Coalescence frame count (packets)"
+	depends on IBM_NEW_EMAC_INTR_COALESCE
+	default "1"
+
+config IBM_NEW_EMAC_RX_COAL_TIMER
+	int "RX Coalescence timer (clock ticks)"
+	depends on IBM_NEW_EMAC_INTR_COALESCE
+	default "1000000"
+
 config IBM_NEW_EMAC_NO_FLOW_CTRL
 	bool
 	default n
@@ -73,4 +118,17 @@ config IBM_NEW_EMAC_MAL_CLR_ICINTSTAT
 
 config IBM_NEW_EMAC_MAL_COMMON_ERR
 	bool
+	default n
+
+config IBM_NEW_EMAC_SYSFS
+	bool "sysfs support for IBM NEW EMAC"
+        depends on IBM_NEW_EMAC
+        default y
+        help
+          When selected, IBM NEW EMAC parameters are exported 
+	  via /sys interface
+
+config RTL8211_ETHTOOL_WOL
+	bool "Support ethtool's wol-ops for RTL8211 PHY"
+	depends on IBM_NEW_EMAC && HLDS_NAS
 	default n

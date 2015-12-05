@@ -97,6 +97,12 @@ unsigned long __max_low_memory = MAX_LOW_MEM;
  */
 phys_addr_t __initial_memory_limit_addr = (phys_addr_t)0x10000000;
 
+#if defined(CONFIG_FAST_MEMSET)
+#define NR_MAX_PIN_PAGES        16
+static unsigned int nr_pinned_pages=0;
+static unsigned long pin_pages[NR_MAX_PIN_PAGES];
+#endif	/* CONFIG_FAST_MEMSET */
+
 /*
  * Check for command-line options that affect what MMU_init will do.
  */
@@ -115,6 +121,37 @@ void MMU_setup(void)
 	__map_without_ltlbs = 1;
 #endif
 }
+
+#if defined(CONFIG_FAST_MEMSET)
+int check_if_ram_page(unsigned long page_addr)
+{
+	int i;
+	for(i=0; i < nr_pinned_pages; i++) {
+		if(page_addr == pin_pages[i])
+			return 1;
+	}
+	return 0;
+}
+
+
+void __init stash_pinned_pages(void)
+{
+	int i;
+
+	for (i = 0; i < PPC44x_TLB_SIZE; i++) {
+		unsigned long w0,w1,w2;
+		asm volatile("tlbre  %0,%1,0" : "=r" (w0) : "r" (i));
+		asm volatile("tlbre  %0,%1,1" : "=r" (w1) : "r" (i));
+		asm volatile("tlbre  %0,%1,2" : "=r" (w2) : "r" (i));
+		if((w0 & PPC44x_TLB_VALID) && (w0 & PPC44x_TLB_256M) ) {
+			if(w2 & PPC44x_TLB_I)
+				continue;
+			else
+				pin_pages[nr_pinned_pages++] = w0 & PPC44x_TLB_EPN_MASK;
+		}
+	}
+}
+#endif	/* CONFIG_FAST_MEMSET */ 
 
 /*
  * MMU_init sets up the basic memory mappings for the kernel,
@@ -183,6 +220,10 @@ void __init MMU_init(void)
 	if (ppc_md.progress)
 		ppc_md.progress("MMU:setio", 0x302);
 
+#if defined(CONFIG_FAST_MEMSET)
+	stash_pinned_pages();
+#endif	/* CONFIG_FAST_MEMSET */		
+		
 	if (ppc_md.progress)
 		ppc_md.progress("MMU:exit", 0x211);
 

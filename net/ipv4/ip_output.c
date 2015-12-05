@@ -1040,7 +1040,7 @@ alloc_new_skb:
 						err = -EMSGSIZE;
 						goto error;
 					}
-					get_page(page);
+					net_get_page(page);
 					skb_fill_page_desc(skb, i, page, sk->sk_sndmsg_off, 0);
 					frag = &skb_shinfo(skb)->frags[i];
 				}
@@ -1199,7 +1199,7 @@ ssize_t	ip_append_page(struct sock *sk, struct page *page,
 		if (skb_can_coalesce(skb, i, page, offset)) {
 			skb_shinfo(skb)->frags[i-1].size += len;
 		} else if (i < MAX_SKB_FRAGS) {
-			get_page(page);
+			net_get_page(page);
 			skb_fill_page_desc(skb, i, page, offset, len);
 		} else {
 			err = -EMSGSIZE;

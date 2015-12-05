@@ -14,6 +14,10 @@ obj-y     = sched.o fork.o exec_domain.o panic.o printk.o \
 obj-$(CONFIG_HAVE_EARLY_RES) += early_res.o
 obj-y += groups.o
 
+ifdef CONFIG_PPC4xx_CPM
+obj-y += kcpmd.o
+endif
+
 ifdef CONFIG_FUNCTION_TRACER
 # Do not trace debug files and internal ftrace files
 CFLAGS_REMOVE_lockdep.o = -pg

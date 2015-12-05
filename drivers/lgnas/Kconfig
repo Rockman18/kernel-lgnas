@@ -1,0 +1,17 @@
+menuconfig LGNAS_DEV
+	tristate "LGNAS device support"
+	default y
+	---help---
+		This option allows you to select drivers that support
+		LG Network Attached Storage.
+
+if LGNAS_DEV
+
+config LGNAS_DEV_HAL
+	tristate "HAL DRIVER for LGNAS"
+	default m
+	---help---
+	This HAL Driver Module to control LGNAS Hardwares
+	which is button, led, fan, lcd, micom, sensor, and so on.
+
+endif

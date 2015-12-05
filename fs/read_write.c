@@ -20,6 +20,9 @@
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
+#ifdef S_MIRROR
+#include "s_mirror.h"
+#endif
 
 const struct file_operations generic_ro_fops = {
 	.llseek		= generic_file_llseek,
@@ -351,6 +354,10 @@ EXPORT_SYMBOL(do_sync_write);
 ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
+#ifdef S_MIRROR
+	loff_t old_pos = *pos;
+#endif
+
 
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EBADF;
@@ -369,6 +376,10 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 		if (ret > 0) {
 			fsnotify_modify(file);
 			add_wchar(current, ret);
+#ifdef S_MIRROR
+			sm_vfs_write(file->f_mirror, buf, ret, &old_pos);
+#endif
+
 		}
 		inc_syscw(current);
 	}
@@ -735,12 +746,22 @@ SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 	struct file *file;
 	ssize_t ret = -EBADF;
 	int fput_needed;
+#ifdef S_MIRROR
+	loff_t old_pos;
+#endif
+
 
 	file = fget_light(fd, &fput_needed);
 	if (file) {
 		loff_t pos = file_pos_read(file);
+#ifdef S_MIRROR
+		old_pos = pos;
+#endif
 		ret = vfs_writev(file, vec, vlen, &pos);
 		file_pos_write(file, pos);
+#ifdef S_MIRROR
+		sm_sys_writev(file->f_mirror, old_pos, vec, vlen, ret);
+#endif
 		fput_light(file, fput_needed);
 	}
 

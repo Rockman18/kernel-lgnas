@@ -45,6 +45,13 @@ source "fs/ocfs2/Kconfig"
 source "fs/btrfs/Kconfig"
 source "fs/nilfs2/Kconfig"
 
+config SPLICE_DMA
+	bool "DMA support for Zero Copy Splice writes"
+	depends on AMCC_PPC460EX_460GT_4CHAN_DMA
+	default n
+	help
+	  DMA support for Zero-Copy splice write support. Also called receive file.
+
 endif # BLOCK
 
 config FILE_LOCKING

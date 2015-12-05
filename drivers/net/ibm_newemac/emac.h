@@ -144,16 +144,18 @@ struct emac_regs {
 #define EMAC_MR1_TFS_2K			0x00080000
 #define EMAC_MR1_TR0_MULT		0x00008000
 #define EMAC_MR1_JPSM			0x00000000
-#define EMAC_MR1_MWSW_001		0x00000000
+#define EMAC_MR1_MWSW_001		0x00001000
 #define EMAC_MR1_BASE(opb)		(EMAC_MR1_TFS_2K | EMAC_MR1_TR0_MULT)
 
 
 #define EMAC4_MR1_RFS_2K		0x00100000
 #define EMAC4_MR1_RFS_4K		0x00180000
+#define EMAC4_MR1_RFS_8K                0x00200000
 #define EMAC4_MR1_RFS_16K		0x00280000
 #define EMAC4_MR1_TFS_2K       		0x00020000
-#define EMAC4_MR1_TFS_4K		0x00030000
-#define EMAC4_MR1_TFS_16K		0x00050000
+#define EMAC4_MR1_TFS_4K                0x00030000
+#define EMAC4_MR1_TFS_8K		0x00040000
+#define EMAC4_MR1_TFS_16K               0x00050000
 #define EMAC4_MR1_TR			0x00008000
 #define EMAC4_MR1_MWSW_001		0x00001000
 #define EMAC4_MR1_JPSM			0x00000800
@@ -211,6 +213,10 @@ struct emac_regs {
 #define EMAC4_RMR_RFAF_64_1024		0x00000006
 #define EMAC4_RMR_RFAF_128_2048		0x00000007
 #define EMAC4_RMR_BASE			EMAC4_RMR_RFAF_128_2048
+#if defined(CONFIG_APM82181)
+#define EMAC4_RMR_MJS_MASK              0x0001fff8
+#define EMAC4_RMR_MJS(s)                ((s << 3) & EMAC4_RMR_MJS_MASK)
+#endif
 
 /* EMACx_ISR & EMACx_ISER */
 #define EMAC4_ISR_TXPE			0x20000000
@@ -264,7 +270,7 @@ struct emac_regs {
 
 /* EMACx_TRTR */
 #define EMAC_TRTR_SHIFT_EMAC4		24
-#define EMAC_TRTR_SHIFT		27
+#define EMAC_TRTR_SHIFT			27
 
 /* EMAC specific TX descriptor control fields (write access) */
 #define EMAC_TX_CTRL_GFCS		0x0200
@@ -308,4 +314,11 @@ struct emac_regs {
 					 EMAC_RX_ST_AE | EMAC_RX_ST_BFCS | \
 					 EMAC_RX_ST_PTL | EMAC_RX_ST_ORE | \
 					 EMAC_RX_ST_IRE )
+#define EMAC_TX_CTRL_TAH_SSR0           0x0002
+#define EMAC_TX_CTRL_TAH_SSR1           0x0004
+#define EMAC_TX_CTRL_TAH_SSR2           0x0006
+#define EMAC_TX_CTRL_TAH_SSR3           0x0008
+#define EMAC_TX_CTRL_TAH_SSR4           0x000a
+#define EMAC_TX_CTRL_TAH_SSR5           0x000c
+#define EMAC_TX_CTRL_TAH_CSUM           0x000e
 #endif /* __IBM_NEWEMAC_H */

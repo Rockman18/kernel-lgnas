@@ -117,6 +117,21 @@ static int sha1_import(struct shash_desc *desc, const void *in)
 	return 0;
 }
 
+static int sha1_partial(struct shash_desc *desc, u8 *data)
+{
+	struct sha1_state *sctx = shash_desc_ctx(desc);
+	int i;
+
+	for (i = 0; i < 5; i++) {
+		*data++ = sctx->state[i] & 0xFF;
+		*data++ = (sctx->state[i] >> 8) & 0xFF;
+		*data++ = (sctx->state[i] >> 16) & 0xFF;
+		*data++ = (sctx->state[i] >> 24) & 0xFF;
+	}
+
+	return 0;
+}
+
 static struct shash_alg alg = {
 	.digestsize	=	SHA1_DIGEST_SIZE,
 	.init		=	sha1_init,
@@ -124,6 +139,8 @@ static struct shash_alg alg = {
 	.final		=	sha1_final,
 	.export		=	sha1_export,
 	.import		=	sha1_import,
+	.partial	= 	sha1_partial,
+	.partialsize	=	SHA1_DIGEST_SIZE,
 	.descsize	=	sizeof(struct sha1_state),
 	.statesize	=	sizeof(struct sha1_state),
 	.base		=	{

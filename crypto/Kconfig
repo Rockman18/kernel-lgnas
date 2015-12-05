@@ -271,6 +271,22 @@ config CRYPTO_FPU
 	select CRYPTO_BLKCIPHER
 	select CRYPTO_MANAGER
 
+config CRYPTO_CRYPTODEV
+	tristate "Cryptodev (/dev/crypto) interface"
+	depends on CRYPTO
+	help
+	  Device /dev/crypto gives userspace programs access to 
+	  kernel crypto algorithms(Sync and Async Support).
+
+config CRYPTO_CRYPTOAPI
+	tristate "CryptoAPI module"
+	depends on CRYPTO
+	help
+		Cryptodev is a device that allows to Linux kernel cryptographic drivers;
+		thus allowing of userspace applications to take advantage of hardware
+		accelerators. It's API is similar to OpenBSD's cryptodev userspace API
+		(/dev/crypto).
+
 comment "Hash modes"
 
 config CRYPTO_HMAC
